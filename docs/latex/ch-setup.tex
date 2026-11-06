@@ -1,0 +1,155 @@
+\chapter{Installation and setup}
+\label{ch:setup}
+
+This chapter sets up a complete local copy on Ubuntu (22.04 or 24.04), Windows or macOS. Every email is captured locally instead, so no accounts with external providers are needed. Since version 0.10 the website is self-contained. It needs only Node.js: its PostgreSQL database and its cache are built in, and it prepares itself the first time it starts. Allow about 5 minutes.
+
+\section{Requirements}
+
+\begin{table}[H]
+\centering\small
+\caption{Software requirements}\label{tab:reqs}
+\begin{tabularx}{\linewidth}{@{}L{3.4cm}L{2.6cm}Y@{}}
+\toprule
+\thead{Software} & \thead{Version} & \thead{Check with} \\
+\midrule
+Node.js and npm & 22.x (20.11+ works) & \code{node -v} \\
+Git or unzip & any & \\
+A browser & recent Chrome, Edge, Firefox or Safari & needed for passkeys \\
+Free port & 3000 & \\
+coturn (TURN relay) & optional & only for in-app calls; \code{sudo apt install coturn} or \code{docker compose up -d coturn} \\
+Resend account & optional for local use & needed to send real emails \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Install and run PryingEyes}
+
+\begin{lstlisting}
+unzip pryingeyes.zip && cd pryingeyes
+npm install
+npm run dev                   # http://localhost:3000
+\end{lstlisting}
+
+Open \url{http://localhost:3000}. The first \code{npm run dev} does the setup itself:
+
+\begin{enumerate}
+\item \textbf{Settings.} \fpath{scripts/prepare.mjs} creates \fpath{.env} from \fpath{.env.example} with this computer's address (\code{http://localhost:3000}) and fills in fresh secret keys, with file mode 0600. It never replaces an existing key. If \fpath{.env} or its keys are missing but the built-in database already holds data, it refuses to start: data encrypted with the old keys can't be read with new ones.
+\item \textbf{Database.} With \code{DATABASE_URL} empty, PostgreSQL runs inside the website (PGlite, PostgreSQL 18 compiled to WebAssembly). Its files are in \fpath{var/data/postgres}. When the server starts, \fpath{src/instrumentation.ts} applies every migration in \fpath{drizzle/}.
+\item \textbf{Cache.} With \code{REDIS_URL} empty, rate limits, call signalling and passkey challenges are held in memory (\fpath{src/lib/memory-redis.ts}).
+\item \textbf{Background jobs.} With \code{BACKGROUND_JOBS=on}, the website runs the retention pass every 10 minutes and the missed-call sweep every 10 seconds itself. There is no separate worker.
+\end{enumerate}
+
+\begin{note}[One process owns the built-in database]
+The built-in database is a folder of files, not a server, so only the website may open it. A lock file (\fpath{var/data/postgres.lock}) makes scripts such as \code{npm run seed} or \code{npm run admin:create} refuse while the website runs; stop it first. Set \code{DATABASE_URL} and \code{REDIS_URL} to use PostgreSQL and Redis servers instead, for example to run several copies of the app. The schema and every feature are identical, and the server test suite passes on both setups.
+\end{note}
+
+To add demo accounts, stop the website and run \code{npm run seed}; it refuses unless \code{APP_ENV=development}. Your own account can become an admin without any script: put its email in \code{ADMIN_EMAILS}, and it gets the role once the email is confirmed.
+
+\paragraph{The Docker route.} \fpath{start.sh} and \fpath{docker-compose.yml} still run PostgreSQL, Redis and coturn in containers (\code{./start.sh setup}, then \code{./start.sh web}), and they drive the phone-app modes. They are optional.
+
+\section{Development tools}
+
+\begin{table}[H]
+\centering\small
+\caption{Where to see what the system would have sent}\label{tab:devtools}
+\begin{tabularx}{\linewidth}{@{}L{4.2cm}Y@{}}
+\toprule
+\thead{Tool} & \thead{Use} \\
+\midrule
+\fpath{http://localhost:3000/dev/outbox} & Every email (confirmation links, codes, alerts), newest first. Email confirmation links have an \ui{Open link} button. \\
+\code{npm run email:test -- --to=<you>} & Sends one test email through the configured provider; use it to check your Resend setup. \\
+\fpath{var/seed-credentials.txt} & Seeded accounts, their authenticator keys and the demo token links. \\
+\code{npm run dev:totp -- <key>} & Prints the current 6-digit code for an authenticator key (for seeded accounts). \\
+\code{npm run jobs:once} & Runs one housekeeping pass immediately. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Seeded accounts}
+
+\code{npm run seed} creates the accounts below, all with the password \code{pryingeyes demo password} and an authenticator app already enrolled. The authenticator keys are printed and saved in \fpath{var/seed-credentials.txt}.
+
+\begin{tabularx}{\linewidth}{@{}L{5.4cm}L{3cm}Y@{}}
+\toprule
+\thead{Email} & \thead{Role} & \thead{Has} \\
+\midrule
+\fpath{owner@demo.pryingeyes.local} & Owner & One protected number; Tier 1, 2 and 3 tokens \\
+\fpath{moderator@demo.pryingeyes.local} & Moderator & Moderation queue \\
+\fpath{admin1@demo.pryingeyes.local} & Administrator & Can request admin actions \\
+\fpath{admin2@demo.pryingeyes.local} & Administrator & Can approve the first admin's requests \\
+\bottomrule
+\end{tabularx}
+
+To sign in as one of them, enter the email and password, then run \code{npm run dev:totp -- <their key>} and type the code shown.
+
+\section{First walkthrough}
+
+\begin{enumerate}
+  \item \textbf{Become an owner.} Choose \ui{Create account}, enter an email and password, keep the suggested handle (or tap \ui{Suggest another}) and tick the 18+ box. Open the confirmation link from \fpath{/dev/outbox}, then sign in. Onboarding asks you to:
+  \begin{itemize}
+    \item create a passkey, or use an authenticator app;
+    \item save your 10 recovery codes;
+    \item add the number to protect.
+  \end{itemize}
+  \item \textbf{Create a token.} Go to \ui{+ New token}, pick where you'll post it (the tier is recommended for you), add a label and create it. Copy the link now: it is shown only once.
+  \item \textbf{Be a caller.} Open the link in a private window. Leave the country on \ui{Eswatini (+268)} and enter any number such as \code{7612 3456} (no dialling code needed), read the code from \fpath{/dev/outbox}, keep the suggested handle and confirm you're 18+. Tick the human check.
+  \begin{itemize}
+    \item \textbf{Tier 1:} choose \ui{Show the number}. The watermarked image hides itself after 60 seconds.
+    \item \textbf{Tier 2:} first confirm a second code sent to your phone.
+    \item \textbf{Tier 3:} add a note and send the request. As the owner, open \ui{Requests} and choose \ui{Allow messages and calls}. As the caller, choose \ui{Call in the app} or \ui{Chat in the app}.
+  \end{itemize}
+  \item \textbf{Call in the app.} Keep the owner signed in in one browser window and the caller in another (a private window, or a second browser profile). Allow the microphone when asked. On the gate or in the chat, the caller chooses \ui{Call in the app}. The owner's window shows a ringing banner on any page; choose \ui{Answer}. Both screens reach \ui{Connected} and the audio goes through the local coturn relay. To see a missed call, close the owner's window, call, and wait 45 seconds (or cancel): the owner's notifications and the chat show the missed call.
+  \item \textbf{Chat and call privately.} From the gate, choose \ui{Chat in the app}. As the owner, the \ui{Chats} menu item now shows an unread count and a ``started a chat'' notification arrives (in \fpath{/dev/outbox} too). As the caller, \ui{Call in the app} in the chat rings the owner while the gate request is valid.
+  \item \textbf{Panic.} On the dashboard, choose \ui{Panic: revoke all}. Every link stops working at once.
+  \item \textbf{Staff tools.} Run \code{npm run admin:create -- --handle=<your handle> --role=moderator} (or \code{admin}), then reload. \ui{Moderation} and \ui{Admin} appear in the menu.
+\end{enumerate}
+
+\section{Sending real emails with Resend (optional)}
+
+Locally, emails are captured at \fpath{/dev/outbox} and nothing is sent. To receive real emails while testing:
+\begin{enumerate}
+  \item Create a free account at \fpath{https://resend.com} and an API key with sending access.
+  \item In \fpath{.env}, set \code{EMAIL_PROVIDER=resend} and \code{RESEND_API_KEY=re_...}. Until you have verified a domain, leave \code{EMAIL_FROM} set to Resend's test sender, \code{onboarding@resend.dev}. Until then, Resend only delivers to the email address that owns the account, so sign up with that address.
+  \item Restart \code{npm run dev} and run \code{npm run email:test -- --to=<your Resend account email>}.
+\end{enumerate}
+In development, emails sent through Resend are still copied to \fpath{/dev/outbox}. To send to anyone, verify your own domain in Resend and change \code{EMAIL_FROM} (§\ref{sec:resend-prod}).
+
+\section{Production-style local run}
+
+The development server (\code{npm run dev}) compiles pages on first visit. To try the optimised build, as the browser tests and load test do, use:
+
+\begin{lstlisting}
+npm run build
+npm start                  # http://localhost:3000
+\end{lstlisting}
+
+\code{npm start} runs with \code{NODE_ENV=production}, but it keeps the development stand-ins as long as \code{APP_ENV=development}. Only \code{APP_ENV=staging} or \code{production} requires real providers and HTTPS (§\ref{sec:appenv}).
+
+\section{Running everything in containers}
+
+\begin{lstlisting}
+docker compose --profile app up -d --build
+\end{lstlisting}
+
+This builds the application image, runs migrations at start-up, and starts the app on port 3000 alongside the retention worker. The containers read \fpath{.env} but are pointed at the compose PostgreSQL and Redis services.
+
+\section{Updating to a new version}
+
+\begin{enumerate}
+  \item Unzip the new version into a fresh folder.
+  \item Copy your existing \fpath{.env} into it. The keys must stay the same, or stored numbers can't be decrypted.
+  \item Run \code{npm ci} and then \code{npm run db:migrate}. Migrations are additive and safe to re-run.
+  \item Restart \code{npm run dev} (or \code{npm start}) and \code{npm run jobs}.
+\end{enumerate}
+
+\section{Resetting the local environment}
+
+\begin{lstlisting}
+docker compose down -v      # deletes the local database and Redis data
+docker compose up -d --wait
+npm run db:migrate && npm run seed
+\end{lstlisting}
+
+\begin{warn}[Keep your keys]
+\code{docker compose down -v} deletes all local data, which is fine for development. Never regenerate keys with \code{--force} on a system with real users: every encrypted number and chat would become unreadable.
+\end{warn}

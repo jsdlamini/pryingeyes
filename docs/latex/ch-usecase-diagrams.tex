@@ -1,0 +1,398 @@
+\chapter{Use-case model}
+\label{ch:usecases}
+
+This chapter is the use-case model of the Phase 1 system. It starts with a context diagram that shows every actor and the subsystems they use. Six detailed use-case diagrams follow, one per subsystem. Chapter~\ref{ch:specs} specifies each use case in full.
+
+\section{Notation}
+
+The diagrams follow UML 2 use-case notation.
+
+\begin{center}\begin{fitfig}
+\begin{tikzpicture}[font=\sffamily\scriptsize]
+  \actor{n1}{(0,0)}{Actor (person)}
+  \node[sysactor] at (2.9,0.55) {\guil{system}\\External system};
+  \node[uc] (n2) at (6.3,0.55) {Use case};
+  \node[ucg] (n3) at (10.4,0.55) {Supporting use case};
+  \draw[incl] (n2) -- node[stereo,above=1pt]{\guil{include}} (n3);
+  \draw[assoc] (12.6,1.3) -- (13.6,1.3) node[right,text=ink]{association};
+  \draw[incl] (12.6,0.75) -- (13.6,0.75) node[right,text=ink]{\guil{include} / \guil{extend}};
+  \draw[gen] (12.6,0.2) -- (13.6,0.2) node[right,text=ink]{generalisation};
+\end{tikzpicture}
+\end{fitfig}\end{center}
+
+\begin{itemize}
+  \item An \textbf{\guil{include}} arrow points from a use case to a step it always performs. For example, \emph{Create a token} always includes \emph{Recommend a tier}.
+  \item An \textbf{\guil{extend}} arrow points from an optional behaviour to the use case it extends, with the condition in brackets. For example, \emph{Confirm a one-time code} extends \emph{Pass the decode gate} only for Tier 2 and Tier 3 tokens.
+  \item A \textbf{generalisation} arrow means the child actor can do everything the parent can. Callers and owners are both \emph{registered users}.
+  \item Grey ellipses are supporting use cases that no actor starts directly.
+\end{itemize}
+
+% ---------------------------------------------------------------------
+\section{Actors}
+\label{sec:actors}
+
+\begin{table}[h]
+\centering\small
+\caption{Actors}\label{tab:actors}
+\begin{tabularx}{\linewidth}{@{}L{3.3cm}Y@{}}
+\toprule
+\thead{Actor} & \thead{Description} \\
+\midrule
+Visitor & Anyone not signed in. Can open a shared link, read public pages and create an account. \\
+Registered user & Any signed-in account. Parent of Caller and Owner; one account can play both roles. \\
+Caller & A registered user trying to reach someone through a code. Signs up with a phone number, which only confirms they are a real person. \\
+Owner & A registered user who protects numbers and issues tokens. Must have a second factor (passkey or authenticator app) and must have used it in the current session. \\
+Moderator & Staff role. Reviews abuse reports; sees report metadata and only the messages a reporter attached, never phone numbers. \\
+Administrator & Staff role. Runs break-glass actions; every action needs a second, different administrator to approve it. \\
+Operator & Whoever has shell access to the server. Runs migrations, seeds, the admin bootstrap and audit verification. \\
+Third-party verifier & Someone outside PryingEyes, such as a platform or police officer, checking an owner's signed evidence pack. \\
+Scheduler & The retention worker (\code{npm run jobs}), running every 10 minutes. \\
+Messaging provider & \guil{system} Delivers email (Resend) in production; the development outbox locally. PryingEyes sends no text messages. \\
+CAPTCHA service & \guil{system} Cloudflare Turnstile in production; a development checkbox locally. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ---------------------------------------------------------------------
+\section{System context}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  % system boundary with subsystem packages
+  \node[sysbox,minimum width=8.2cm,minimum height=7.6cm] (sys) at (7,4.6) {};
+  \node[systitle] at (sys.north west) {PryingEyes — Phase 1 website};
+  \foreach \n/\x/\y/\t in {
+      p1/5.0/6.9/{Accounts \&\\authentication},
+      p2/9.0/6.9/{Numbers \&\\tokens},
+      p3/5.0/5.0/{Decode gate \&\\contact},
+      p4/9.0/5.0/{Chat \&\\safety},
+      p5/5.0/3.1/{Audit, evidence\\\& data rights},
+      p6/9.0/3.1/{Administration \&\\housekeeping}} {
+    \node[draw=accent2,fill=soft,rounded corners=2pt,font=\sffamily\footnotesize\bfseries,align=center,
+          minimum width=3.4cm,minimum height=1.35cm,text=ink] (\n) at (\x,\y) {\t};
+  }
+  \node[font=\sffamily\scriptsize,text=muted] at (7,1.5) {Diagrams in §\ref{sec:uc-accounts}–§\ref{sec:uc-admin}};
+
+  % people
+  \actor{vis}{(-0.9,7.6)}{Visitor}
+  \actor{cal}{(-0.9,4.4)}{Caller}
+  \actor{own}{(14.9,5.6)}{Owner}
+  \actor{mod}{(4.4,-1.9)}{Moderator}
+  \actor{adm}{(7.0,-1.9)}{Administrator}
+  \actor{opr}{(9.6,-1.9)}{Operator}
+  \actor{ver}{(14.9,9.3)}{Third-party\\verifier}
+  % systems
+  \node[sysactor] (msg) at (-0.9,1.7) {\guil{system}\\Messaging provider\\(email)};
+  \node[sysactor] (cap) at (7,10.4) {\guil{system}\\CAPTCHA service};
+  \node[sysactor] (sch) at (14.9,1.9) {\guil{system}\\Scheduler\\(retention worker)};
+
+  \begin{scope}[lbl/.append style={align=center}]
+  \draw[assoc,shorten <=0.4cm] (vis) -- node[lbl,pos=0.55]{opens a link,\\signs up} (sys.west |- vis);
+  \draw[assoc,shorten <=0.4cm] (cal) -- node[lbl,pos=0.55]{passes the gate,\\calls, chats} (sys.west |- cal);
+  \draw[assoc] (msg) -- node[lbl,pos=0.5]{codes,\\alerts} (sys.west |- msg);
+  \draw[assoc,shorten <=0.4cm] (own) -- node[lbl,pos=0.5]{protects numbers,\\decides requests} (sys.east |- own);
+  \draw[assoc,shorten <=0.4cm] (ver) -- node[lbl,pos=0.45]{checks an\\evidence pack} (sys.north east);
+  \draw[assoc] (cap) -- node[lbl]{human check} (sys.north -| cap);
+  \draw[assoc] (sch) -- node[lbl,pos=0.5]{expiry, purge,\\anchoring} (sys.east |- sch);
+  \draw[assoc,shorten <=0.4cm] (mod) -- node[lbl]{reviews\\reports} (sys.south -| mod);
+  \draw[assoc,shorten <=0.4cm] (adm) -- node[lbl]{dual-control\\actions} (sys.south -| adm);
+  \draw[assoc,shorten <=0.4cm] (opr) -- node[lbl]{migrate, seed,\\verify} (sys.south -| opr);
+  \end{scope}
+\end{tikzpicture}
+\end{fitfig}
+\caption{System context: actors and subsystems}
+\label{fig:uc-context}
+\end{figure}
+
+Figure~\ref{fig:uc-context} shows who interacts with the system. Each subsystem has its own diagram below. Table~\ref{tab:uc-matrix} in Chapter~\ref{ch:specs} lists which actor takes part in which use case.
+
+% ---------------------------------------------------------------------
+\section{Accounts and authentication}
+\label{sec:uc-accounts}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[sysbox] (2.4,-1.4) rectangle (12.65,12.2);
+  \node[systitle] at (2.4,12.2) {Accounts \& authentication};
+
+  \node[uc] (a1) at (4.8,10.7) {Register with email};
+  \node[uc] (a2) at (4.8,9.0) {Sign up from a code or invite};
+  \node[uc] (a4) at (4.8,7.2) {Sign in with a password};
+  \node[uc] (a5) at (4.8,5.5) {Sign in with a passkey};
+  \node[uc] (a6) at (4.8,3.8) {Enrol a second factor};
+  \node[uc] (a8) at (4.8,2.1) {Recover account with a recovery code};
+  \node[uc] (a9) at (4.8,0.4) {Manage sessions \& devices};
+  \node[uc] (a10) at (4.8,-0.95) {Change password};
+
+  \node[ucg] (a3) at (10.3,11.0) {Verify email address};
+  \node[ucg] (a11) at (10.3,9.6) {Generate a handle};
+  \node[ucg] (a2b) at (10.3,8.1) {Return to the code or invite};
+  \node[ucg] (a7m) at (10.3,6.3) {Complete second factor};
+  \node[ucg] (a6b) at (10.3,3.8) {Save recovery codes};
+  \node[ucg] (a8b) at (10.3,2.4) {Wait 24 h \& alert every device};
+  \node[ucg] (a7) at (10.3,-0.25) {Confirm it's you (step-up)};
+
+  \draw[incl] (a1) -- node[stereo,above,sloped]{\guil{include}} (a3);
+  \draw[incl] (a1) -- node[stereo,below,sloped]{\guil{include}} (a11);
+  \draw[incl] (a2) -- node[stereo,above,sloped,pos=0.45]{\guil{include}} (a11);
+  \draw[incl] (a2) -- node[stereo,below,sloped]{\guil{include}} (a2b);
+  \draw[incl] (a7m) -- node[stereo,above,sloped,align=center]{\guil{extend}\\[-1pt][MFA enrolled]} (a4);
+  \draw[incl] (a6) -- node[stereo,above]{\guil{include}} (a6b);
+  \draw[incl] (a8) -- node[stereo,above,sloped]{\guil{include}} (a8b);
+  \draw[incl] (a9) -- node[stereo,above,sloped]{\guil{include}} (a7);
+  \draw[incl] (a10) -- node[stereo,below,sloped]{\guil{include}} (a7);
+
+  \actor{vis}{(0,9.3)}{Visitor}
+  \actor{reg}{(0,3.4)}{Registered\\user}
+  \actor{cal}{(-0.9,-2.7)}{Caller}
+  \actor{own}{(0.9,-2.7)}{Owner}
+  \node[sysactor] (msg) at (14.7,9.6) {\guil{system}\\Messaging\\provider};
+
+  \assocline{vis}{a1} \assocline{vis}{a2}
+  \foreach \u in {a4,a5,a6,a8,a9,a10} { \assocline{reg}{\u} }
+  \draw[gen] (-0.9,-1.45) -- (-0.3,2.55);
+  \draw[gen] (0.9,-1.45) -- (0.3,2.55);
+  \draw[assoc] (msg) -- (a3);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Use cases — accounts and authentication}
+\label{fig:uc-accounts}
+\end{figure}
+
+People register with an email. Someone who arrives from a contact code or group invite signs up the same way and returns to it afterwards. Sign-up includes \emph{Generate a handle}: a free random handle is suggested and can be kept, replaced or typed over. Second-factor checks extend password sign-in only once a factor is enrolled. Passkey sign-in satisfies both factors at once. Session management and password changes need a recent second-factor confirmation (step-up). Someone who has lost their second factor uses a recovery code instead. That starts a 24-hour cooling-off period, during which every signed-in device is alerted and can cancel.
+
+% ---------------------------------------------------------------------
+\section{Numbers and tokens}
+\label{sec:uc-tokens}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[sysbox] (2.4,-1.5) rectangle (12.65,12.1);
+  \node[systitle] at (2.4,12.1) {Numbers \& tokens};
+
+  \node[uc] (t1) at (4.8,10.6) {Add a protected number};
+  \node[uc] (t2) at (4.8,9.0) {Remove a protected number};
+  \node[uc] (t3) at (4.8,7.4) {Create a token};
+  \node[uc] (t4) at (4.8,5.8) {Pause, resume or extend a token};
+  \node[uc] (t5) at (4.8,4.2) {Rotate a token};
+  \node[uc] (t7) at (4.8,2.6) {Clone a token with new settings};
+  \node[uc] (t8) at (4.8,1.0) {Revoke a token};
+  \node[uc] (t9) at (4.8,-0.6) {Panic: revoke all tokens};
+
+  \node[ucg] (v1) at (10.3,10.6) {Encrypt number into the vault};
+  \node[ucg] (s1) at (10.3,8.9) {Confirm it's you (step-up)};
+  \node[ucg] (r1) at (10.3,6.9) {Recommend a tier from context};
+  \node[ucg] (c1) at (10.3,4.9) {Show link, QR \& short code once};
+  \node[ucg] (n1) at (10.3,-0.6) {Notify the owner};
+
+  \draw[incl] (t1) -- node[stereo,above]{\guil{include}} (v1);
+  \draw[incl] (t2) -- node[stereo,above]{\guil{include}} (s1);
+  \draw[incl] (t3.east) -- node[stereo,below,sloped]{\guil{include}} (r1);
+  \draw[incl] (t3.south east) -- node[stereo,below,sloped,pos=0.55]{\guil{include}} (c1);
+  \draw[incl] (t5) -- node[stereo,below,sloped]{\guil{include}} (c1);
+  \draw[incl] (t7) -- node[stereo,below,sloped]{\guil{include}} (c1);
+  \draw[incl] (s1.south west) -- node[stereo,pos=0.5,above,sloped,align=center]{\guil{extend} [after a panic]} (t3.north east);
+  \draw[incl] (t9) -- node[stereo,above]{\guil{include}} (n1);
+
+  \actor{own}{(0,4.6)}{Owner}
+  \foreach \u in {t1,t2,t3,t4,t5,t7,t8,t9} { \assocline{own}{\u} }
+\end{tikzpicture}
+\end{fitfig}
+\caption{Use cases — numbers and tokens}
+\label{fig:uc-tokens}
+\end{figure}
+
+Only owners take part in this subsystem. A number is encrypted the moment it's added. A token's link, QR code and short code are shown once, because only a keyed fingerprint is stored. Rotation replaces the codes and kills the old ones in one step. After a panic revoke-all, creating a token requires a fresh second-factor check, and so do rotating, cloning and resuming one (shown on \emph{Create a token} only, for readability). The panic itself never asks for one. Every action here writes an audit event; that's left off the diagram for readability.
+
+% ---------------------------------------------------------------------
+\section{Decode gate and contact}
+\label{sec:uc-gate}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[sysbox] (2.4,0.5) rectangle (12.65,12.0);
+  \node[systitle] at (2.4,12.0) {Decode gate \& contact};
+
+  \node[uc] (g1) at (4.8,10.5) {Open a shared link or code};
+  \node[uc] (g6) at (4.8,6.9) {View the number (watermarked)};
+  \node[uc] (g8) at (4.8,5.2) {Chat in the app};
+  \node[uc] (g9) at (4.8,3.2) {Report a request};
+
+  \node[ucg] (g2) at (10.3,10.5) {Pass the decode gate};
+  \node[uc]  (g3) at (10.3,8.55) {Confirm a one-time code};
+  \node[uc]  (g4) at (10.3,6.85) {Ask the owner for consent};
+  \node[uc]  (g5) at (10.3,5.1) {Decide a contact request};
+  \node[uc] (g10) at (4.8,1.4) {Call in the app (data)};
+  \node[uc]  (g11) at (10.3,1.4) {Answer or miss an in-app call};
+
+  \draw[incl] (g1) -- node[stereo,above]{\guil{include}} (g2);
+  \draw[incl] (g3) -- node[stereo,left,align=right,pos=0.5]{\guil{extend}\\[-1pt][Tier 2–3]} (g2);
+  \draw[incl] (g4.west) to[out=160,in=200,looseness=1.6] node[stereo,left,align=right,pos=0.5]{\guil{extend}\\[-1pt][Tier 3]} (g2.south west);
+
+  \actor{cal}{(0,6.0)}{Caller}
+  \actor{own}{(14.7,4.4)}{Owner}
+  \node[sysactor] (msg) at (14.7,8.6) {\guil{system}\\Messaging\\provider};
+  \node[sysactor] (cap) at (14.7,11.0) {\guil{system}\\CAPTCHA\\service};
+  \node[sysactor] (turn) at (7.55,-1.0) {\guil{system}\\TURN relay (coturn)};
+
+  \assocline{cal}{g1} \assocline{cal}{g10} \assocline{cal}{g6} \assocline{cal}{g8} \assocline{cal}{g9}
+  \assocline{own}{g5} \assocline{own}{g11}
+  \draw[incl] (g10) -- node[stereo,above]{\guil{include}} (g11);
+  \draw[assoc] (turn.north west) -- (g10.south east);
+  \draw[assoc] (turn.north east) -- (g11.south west);
+  \draw[assoc] (msg) -- (g3);
+  \draw[assoc] (cap) -- (g2);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Use cases — decode gate and contact}
+\label{fig:uc-gate}
+\end{figure}
+
+This subsystem is what the original brief describes as decoding the number on the system first. Opening a code always includes passing the gate: sign-in, a human check and server-side budgets, in that order. Confirming a one-time code extends the gate for Tier 2 and Tier 3 tokens. Asking the owner extends it for Tier 3. Once through, the caller picks an outcome the tier allows:
+\begin{itemize}
+  \item A watermarked reveal, only for codes backed by a phone number (Tiers 1--2, or Tier 3 after \emph{Reveal once}).
+  \item An in-app call over data, through PryingEyes' own TURN relay. No phone numbers are used, and IP addresses stay hidden.
+  \item A chat.
+\end{itemize}
+The owner decides Tier 3 requests: approve calls and chat, reveal once, decline, or decline and block. An in-app call includes the owner answering it. If the owner's app is closed, the call becomes a missed call (G11). The messaging provider delivers one-time codes.
+
+% ---------------------------------------------------------------------
+\section{Chat and safety}
+\label{sec:uc-chat}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[sysbox] (2.4,0.8) rectangle (12.65,11.2);
+  \node[systitle] at (2.4,11.2) {Chat \& safety};
+
+  \node[uc] (c1) at (4.8,9.6) {Exchange messages};
+  \node[uc] (c2) at (4.8,7.6) {Block a person};
+  \node[uc] (c3) at (4.8,5.4) {Report abuse};
+  \node[uc] (c5) at (4.8,3.2) {Receive the outcome};
+
+  \node[ucg] (c6) at (10.3,9.6) {Make Tier 3 messages disappear (24 h)};
+  \node[uc]  (m1) at (10.3,7.6) {Review the moderation queue};
+  \node[uc]  (m2) at (10.3,5.9) {Warn, suspend or close a conversation};
+  \node[ucg] (c4) at (10.3,4.1) {Attach chosen messages};
+  \node[ucg] (c7) at (10.3,2.2) {Purge expired messages};
+
+  \draw[incl] (c6) -- node[stereo,above,align=center]{\guil{extend}\\[-1pt][Tier 3 token]} (c1);
+  \draw[incl] (c4) -- node[stereo,below,sloped,align=center]{\guil{extend}} (c3);
+  \draw[incl] (m2) -- node[stereo,right]{\guil{extend}} (m1);
+
+  \actor{par}{(0,5.6)}{Registered user\\(caller or owner)}
+  \actor{mod}{(14.7,6.2)}{Moderator}
+  \node[sysactor] (sch) at (14.7,2.2) {\guil{system}\\Scheduler};
+
+  \foreach \u in {c1,c2,c3,c5} { \assocline{par}{\u} }
+  \assocline{mod}{m1} \assocline{mod}{m2}
+  \draw[assoc] (sch) -- (c7);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Use cases — chat and safety}
+\label{fig:uc-chat}
+\end{figure}
+
+Chats open from the gate, so neither side ever sees the other's number. Blocking works in both directions and also stops the blocked person passing the gate on any of the blocker's codes. A report carries only the messages the reporter chooses to attach. Moderators work a queue with a 60-minute first-response target. They can dismiss, warn, suspend (which signs the person out and pauses their tokens) or close a conversation.
+
+% ---------------------------------------------------------------------
+\section{Audit, evidence and data rights}
+\label{sec:uc-data}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[sysbox] (2.4,0.3) rectangle (12.65,11.8);
+  \node[systitle] at (2.4,11.8) {Audit, evidence \& data rights};
+
+  \node[uc] (d1) at (4.8,10.3) {View the audit trail};
+  \node[uc] (d2) at (4.8,8.6) {Export an evidence pack};
+  \node[uc] (d4) at (4.8,6.2) {Export my data};
+  \node[uc] (d5) at (4.8,4.6) {Erase my account};
+  \node[uc] (d6) at (4.8,3.0) {Set privacy preferences};
+  \node[uc] (d7) at (4.8,1.4) {Read notifications};
+
+  \node[ucg] (e1) at (10.3,9.5) {Sign the pack (Ed25519)};
+  \node[uc]  (e2) at (10.3,7.8) {Verify an evidence pack};
+  \node[ucg] (s1) at (10.3,6.0) {Confirm it's you (step-up)};
+  \node[ucg] (e3) at (10.3,4.1) {Crypto-shred the data key};
+  \node[ucg] (e4) at (10.3,1.9) {Apply audit retention};
+
+  \draw[incl] (d2) -- node[stereo,above,sloped]{\guil{include}} (e1);
+  \draw[incl] (d4) -- node[stereo,above]{\guil{include}} (s1);
+  \draw[incl] (d5) -- node[stereo,above,sloped]{\guil{include}} (s1);
+  \draw[incl] (d5) -- node[stereo,below,sloped]{\guil{include}} (e3);
+
+  \actor{own}{(0,8.6)}{Owner}
+  \actor{reg}{(0,3.0)}{Registered\\user}
+  \actor{ver}{(14.7,7.2)}{Third-party\\verifier}
+  \node[sysactor] (sch) at (14.7,1.9) {\guil{system}\\Scheduler};
+
+  \assocline{own}{d1} \assocline{own}{d2}
+  \foreach \u in {d4,d5,d6,d7} { \assocline{reg}{\u} }
+  \draw[gen] (0,8.1) -- (0,4.45);
+  \assocline{ver}{e2}
+  \draw[assoc] (sch) -- (e4);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Use cases — audit, evidence and data rights}
+\label{fig:uc-data}
+\end{figure}
+
+Owners see every request against their codes in a tamper-evident audit trail. They can export it as an evidence pack: a JSON file signed with Ed25519 and a printable PDF. Anyone can check a pack's signature at \fpath{/api/evidence/verify}. Every registered user can download all their data or erase their account. Erasure deletes the account's rows and its data key, so any copy left in a backup can't be decrypted. The scheduler applies the audit-retention period each owner has chosen.
+
+% ---------------------------------------------------------------------
+\section{Administration and housekeeping}
+\label{sec:uc-admin}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \draw[sysbox] (2.4,0.4) rectangle (12.65,11.6);
+  \node[systitle] at (2.4,11.6) {Administration \& housekeeping};
+
+  \node[uc] (o1) at (4.8,10.1) {Request a break-glass action};
+  \node[uc] (o2) at (4.8,8.3) {Approve or reject an action};
+  \node[uc] (o3) at (4.8,5.6) {Bootstrap an administrator};
+  \node[uc] (o4) at (4.8,3.9) {Run migrations \& seed};
+  \node[uc] (o5) at (4.8,2.2) {Verify the audit chain};
+
+  \node[ucg] (s1) at (10.3,9.6) {Confirm it's you (step-up)};
+  \node[ucg] (x1) at (10.3,7.6) {Execute: suspend, roles, re-wrap keys};
+  \node[ucg] (w1) at (10.3,5.7) {Write audit event};
+  \node[uc]  (h1) at (10.3,3.7) {Run housekeeping};
+  \node[ucg] (h2) at (10.3,1.8) {Anchor the day's audit head};
+
+  \draw[incl] (o1) -- node[stereo,above]{\guil{include}} (s1);
+  \draw[incl] (o2) -- node[stereo,above,sloped]{\guil{include}} (s1);
+  \draw[incl] (o2) -- node[stereo,below,sloped]{\guil{include}} (x1);
+  \draw[incl] (x1) -- node[stereo,right]{\guil{include}} (w1);
+  \draw[incl] (o3) -- node[stereo,above]{\guil{include}} (w1);
+  \draw[incl] (h1) -- node[stereo,right]{\guil{include}} (h2);
+
+  \actor{adm}{(0,8.6)}{Administrator}
+  \actor{opr}{(0,3.3)}{Operator}
+  \node[sysactor] (sch) at (14.7,3.7) {\guil{system}\\Scheduler};
+
+  \assocline{adm}{o1} \assocline{adm}{o2}
+  \assocline{opr}{o3} \assocline{opr}{o4} \assocline{opr}{o5}
+  \draw[assoc] (sch) -- (h1);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Use cases — administration and housekeeping}
+\label{fig:uc-admin}
+\end{figure}
+
+Break-glass actions are suspend or unsuspend a user, grant or revoke a role, and re-wrap every data key after a key rotation. One administrator requests the action with a reason, and a \emph{different} administrator approves or rejects it within 24 hours. Both steps need a recent second-factor check and are written to the audit chain. Operators bootstrap the first administrators from the server shell, which is also audited. The scheduler expires tokens and consent requests, purges data that has passed its retention period, and anchors each completed day's audit head to a write-once file.

@@ -1,0 +1,48 @@
+\chapter{Design decisions}
+\label{app:decisions}
+
+These are the points where the specification left a choice open, or where the build departs from it. The full list, with reasons, is in \fpath{docs/ASSUMPTIONS.md}. Items marked \textbf{(review)} need the product owner's confirmation.
+
+\begin{longtable}{@{}L{4.4cm}p{10.8cm}@{}}
+\toprule
+\thead{Decision} & \thead{Why} \\
+\midrule\endhead
+Drizzle instead of Prisma \textbf{(review)} & Prisma's migration engine is a binary that couldn't be downloaded in the build environment, so it couldn't be tested. Drizzle is pure TypeScript with plain SQL migrations on the same PostgreSQL. \\
+Codes shown once \textbf{(review)} & Only HMAC fingerprints are stored, as rule 4 requires. A lost link is replaced by rotating the token. The alternative is storing codes encrypted, which would let owners copy them again. \\
+\code{APP_ENV} separate from \code{NODE_ENV} & \code{next start} always sets \code{NODE_ENV=production}, even on a desktop. \code{APP_ENV} decides whether development stand-ins are allowed. \\
+CAPTCHA before token lookup & A CAPTCHA failure after the lookup would reveal that the code exists. \\
+Per-caller in-flight cap of 2 & Without it, a burst of parallel guesses was evaluated before the lockout applied, giving 99.90\% blocked and failing the over-99.9\% bar. With it: 99.95\%. \\
+Generated handles & Handles are visible to everyone a person contacts, so the default is random (\code{adjective_noun_NN}) and never derived from the email, name or phone. People can still type their own. \\
+Chat by polling (3 s) & Works through any proxy with a stateless server. The message API is transport-independent, so WebSockets or server-sent events can be added later. \\
+Region is country-level & Taken from the edge's country header, or the caller's phone country. No GeoIP database is shipped. \\
+Panic without step-up & Revoking is always safe; re-issuing afterwards needs a fresh second factor. \\
+Development outbox stores masked numbers & Even development databases pass the plaintext scan. \\
+Resend for email, via its REST API & No SDK or SMTP dependency. Idempotent retries on 429 and 5xx only; text and HTML bodies; category tags; addresses never logged. The test sender is refused outside development. \\
+Daily anchors for completed days only & A day's head is final only once the day ends. \\
+Phase 2 seams & Tier 4 is in the schema but can't be selected; the KMS interface and the chat encryption module are isolated for later replacement. \\
+\bottomrule
+\end{longtable}
+
+\section*{Document history}
+
+\begin{tabularx}{\linewidth}{@{}L{2.2cm}L{2.6cm}Y@{}}
+\toprule
+\thead{Version} & \thead{Date} & \thead{Change} \\
+\midrule
+1.0 & 3 November 2026 & First edition, for Phase 1 (system version 0.1.0, including generated handles and the migration retry). \\
+1.1 & 4 November 2026 & Email through Resend; handle validation and autofill protection on sign-up; recovery from email failures. \\
+1.2 & 4 November 2026 & Country picker for every phone field; clearer chat and relay-call guidance (option cards, call steps, \ui{Call privately} in chats); chat notifications and unread badge. \\
+1.3 & 4 November 2026 & In-app calls over data through a self-hosted TURN relay (coturn); missed calls; call timeline in chats; native-app contract; phone relay made optional. \\
+1.4 & 4 November 2026 & Website visual refresh; iOS and Android app (Expo) with bearer sessions, calls, QR scanning and the full owner set-up. \\
+1.5 & 5 November 2026 & Safe groups and 24-hour statuses: contact-details guard, contact codes on posts, invite links, App Links and Universal Links that open the gate with the code filled in. \\
+1.6 & 5 November 2026 & Phone numbers optional: app-only codes (message and in-app call), two-step sign-in only for adding a number to show; phone-network calls removed. \\
+1.7 & 6 November 2026 & Email only: phone sign-up and all text messages removed; Tier 2 and 3 codes by email; sign-up returns people to the code or invite they opened. \\
+1.8 & 6 November 2026 & Joining a group needs an admin's approval; group search; codes shared in chats; 24-hour and one-person codes anywhere. \\
+1.9 & 6 November 2026 & New look for the website and app (Talk Sense style); screenshots retaken. \\
+1.10 & 6 November 2026 & Icon buttons: paper-plane send, flag, block, bin and sign-out icons; round call controls. \\
+1.11 & 6 November 2026 & Site address (\code{APP_URL}) moved to the top of \fpath{.env}; \code{RP_ID} follows it; production refuses a localhost address. \\
+1.12 & 6 November 2026 & Live address set: \url{https://pryingeyes.idealsoftwaresolutions.com}; the settings template, call relay and app store builds point at it. \\
+1.13 & 6 November 2026 & Self-contained website: built-in PostgreSQL (PGlite) and cache, self-preparing \code{.env}, migrations and jobs on start; \code{ADMIN_EMAILS}; deployment without Docker. \\
+1.14 & 6 November 2026 & Production Docker setup (\fpath{docker-compose.prod.yml}: website with its data in a volume, plus the relay); key fingerprint check; container-safe database lock; \fpath{/api/health}. \\
+\bottomrule
+\end{tabularx}

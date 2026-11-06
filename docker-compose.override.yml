@@ -1,0 +1,7 @@
+services:
+  app:
+    networks: [default, proxy]
+networks:
+  proxy:
+    external: true
+    name: docker_webnet

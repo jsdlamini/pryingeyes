@@ -1,0 +1,238 @@
+\chapter{Reference}
+\label{ch:reference}
+
+\section{HTTP API}
+
+All endpoints are under \fpath{/api} and exchange JSON. Every \code{POST}, \code{PATCH} and \code{DELETE} must come from the same origin; cross-site requests get \code{403 bad_origin}. Errors have the shape \texttt{\{"error": code, "message": text\}}. Responses are never cached.
+
+\newcommand{\ep}[3]{\code{#1} & \fpath{#2} & #3 \\}
+\newcommand{\apigroup}[1]{\midrule\multicolumn{3}{@{}l}{\textsf{\textbf{\small\color{accent}#1}}}\\}
+\begingroup\small
+\begin{longtable}{@{}L{1.5cm}L{6.3cm}p{7.3cm}@{}}
+\caption{API endpoints}\label{tab:api}\\
+\toprule
+\thead{Method} & \thead{Path} & \thead{Purpose (auth required)} \\
+\midrule\endfirsthead
+\toprule
+\thead{Method} & \thead{Path} & \thead{Purpose (auth required)} \\
+\midrule\endhead
+\apigroup{Accounts and sign-in}
+\ep{POST}{/api/auth/signup}{Email sign-up; handle optional (none)}
+\ep{POST}{/api/auth/verify-email}{Confirm the emailed link (none)}
+\ep{GET}{/api/auth/handle}{Suggest a free handle; \code{?check=} tests one (none)}
+\ep{POST}{/api/auth/login}{Password sign-in (none)}
+\ep{POST}{/api/auth/logout}{Sign out this session}
+\ep{POST}{/api/auth/mfa/totp}{Complete MFA, or step up, with an authenticator code}
+\ep{POST}{/api/auth/totp/setup}{Start authenticator enrolment (QR code and key)}
+\ep{POST}{/api/auth/totp/confirm}{Confirm enrolment; returns recovery codes on the first factor}
+\ep{POST}{/api/auth/passkey/register-options}{Begin passkey registration}
+\ep{POST}{/api/auth/passkey/register-verify}{Finish passkey registration}
+\ep{POST}{/api/auth/passkey/login-options}{Begin a passkey ceremony (sign-in, MFA or step-up)}
+\ep{POST}{/api/auth/passkey/login-verify}{Finish the ceremony}
+\ep{DELETE}{/api/auth/passkey/[id]}{Remove a passkey (step-up; not the last factor)}
+\ep{POST}{/api/auth/recovery-codes}{Generate new recovery codes (step-up)}
+\ep{POST}{/api/auth/recovery/start}{Use a recovery code; starts the 24-hour cooldown}
+\ep{POST}{/api/auth/recovery/complete}{Finish recovery after the cooldown}
+\ep{POST}{/api/auth/recovery/cancel}{Cancel an open recovery}
+\ep{GET}{/api/auth/sessions}{List signed-in devices}
+\ep{DELETE}{/api/auth/sessions/[id]}{Sign out a device}
+\ep{POST}{/api/auth/password}{Change password}
+\ep{GET}{/api/me}{Profile, factors, owner checklist}
+\ep{PATCH}{/api/me/settings}{Audit retention (1--24 months) and read receipts}
+\ep{GET}{/api/me/export}{Download all my data (step-up)}
+\ep{POST}{/api/me/erase}{Erase my account (step-up; confirmation phrase)}
+\apigroup{Numbers and tokens (owner)}
+\ep{GET, POST}{/api/numbers}{List or add protected numbers; POST takes \code{phone}, \code{country}, \code{label}}
+\ep{DELETE}{/api/numbers/[id]}{Remove a number and its tokens (step-up)}
+\ep{GET}{/api/tokens}{List tokens; \code{?recommend=<context>} returns a tier recommendation}
+\ep{POST}{/api/tokens}{Create a token; the response holds the link and short code (shown once)}
+\ep{POST}{/api/tokens/[id]}{\code{pause}, \code{resume}, \code{revoke}, \code{rotate}, \code{extend}, \code{clone}}
+\ep{POST}{/api/panic}{Revoke every token (no step-up)}
+\ep{GET}{/api/dashboard}{Stats, tokens and recent feed}
+\apigroup{Decode gate and contact}
+\ep{POST}{/api/gate/start}{Start, or resume, a gate request for a code}
+\ep{GET}{/api/gate/[id]}{Current state of a request}
+\ep{POST}{/api/gate/[id]/otp}{\code{send} or \code{verify} a one-time code}
+\ep{POST}{/api/gate/[id]/consent}{Send a Tier 3 request with an optional note}
+\ep{POST}{/api/gate/[id]/outcome}{Choose \code{reveal}, \code{chat} or \code{app_call}}
+\ep{GET}{/api/reveal/[grantId]}{Watermarked PNG, single use, 60 seconds}
+\ep{GET}{/api/requests}{Owner: Tier 3 requests}
+\ep{POST}{/api/requests/[id]/decision}{Owner: \code{approve_relay}, \code{reveal_once}, \code{decline}, \code{decline_block}}
+\apigroup{In-app calls (over data)}
+\ep{POST}{/api/gate/[id]/outcome}{With \code{choice: app_call}: start an in-app call; returns \code{appCallId}}
+\ep{GET}{/api/calls/incoming}{Is someone calling me? Polled every 3 s by the open app; also marks me online}
+\ep{GET}{/api/calls/ice}{Short-lived TURN credentials and \code{iceTransportPolicy}}
+\ep{GET}{/api/calls/[id]}{Call state: role, other handle, status, ring deadline, owner online, chat link}
+\ep{POST}{/api/calls/[id]}{\code{action}: \code{accept} or \code{decline} (owner), \code{cancel} or \code{hangup} (either side)}
+\ep{GET}{/api/calls/[id]/signal}{Take (and delete) waiting offer, answer and ICE messages, plus the call state; doubles as the heartbeat}
+\ep{POST}{/api/calls/[id]/signal}{Send \code{offer}, \code{answer}, \code{ice} or \code{restart}; non-relay candidates are dropped}
+\apigroup{Chat, safety and moderation}
+\ep{GET}{/api/chats}{My conversations, with unread counts}
+\ep{GET, POST}{/api/chats/[id]/messages}{Read (\code{?after=}) or send messages; GET also returns \code{call} (whether the caller can start a private call, and the request to use)}
+\ep{POST}{/api/chats/[id]/block}{Block the other person}
+\ep{POST}{/api/reports}{Report from a conversation or a request}
+\ep{GET}{/api/moderation}{Moderator: queue (\fpath{?status=open|actioned|dismissed})}
+\ep{POST}{/api/moderation/[id]}{Moderator: \code{dismiss}, \code{warn}, \code{suspend}, \code{close_conversation}}
+\ep{GET, POST}{/api/notifications}{List notifications or mark them read; GET also returns \code{chatsUnread}}
+\apigroup{Audit, evidence and administration}
+\ep{GET}{/api/audit}{Owner feed (\code{?before=<seq>})}
+\ep{GET}{/api/audit/export}{Evidence pack (\code{?format=json|pdf}, \code{from}, \code{to})}
+\ep{GET}{/api/evidence/public-key}{Ed25519 public key (none)}
+\ep{POST}{/api/evidence/verify}{Check an evidence pack's signature (none)}
+\ep{GET, POST}{/api/admin/actions}{Admin: list or request break-glass actions (step-up)}
+\ep{POST}{/api/admin/actions/[id]}{Admin: approve or reject (different admin; step-up)}
+\ep{GET}{/api/dev/outbox}{Development only: captured messages}
+\bottomrule
+\end{longtable}
+\endgroup
+
+\subsection{Gate response statuses}
+
+\begin{tabularx}{\linewidth}{@{}L{3.2cm}Y@{}}
+\toprule
+\code{ok} & Includes \code{requestId}, \code{tier}, \code{label}, \code{step} (\code{otp}, \code{consent}, \code{waiting}, \code{choose}) and the allowed \code{options}. \\
+\code{unavailable} & Identical for every reason: unknown, inactive, blocked, budget used, declined or expired. \\
+\code{limited} & Includes \code{retryAfter} in seconds. \\
+\code{captcha_failed} & The human check failed. \\
+\code{otp_wrong} & The one-time code didn't match. \\
+\bottomrule
+\end{tabularx}
+
+\subsection{Common error codes}
+
+\begin{longtable}{@{}L{4.2cm}p{11cm}@{}}
+\toprule
+\thead{Code} & \thead{Meaning} \\
+\midrule\endhead
+\code{signin_required} (401) & No valid session. \\
+\code{mfa_required} (401) & The session is waiting for its second factor. \\
+\code{verification_required} (403) & Email or phone not verified yet. \\
+\code{owner_setup_required} (403) & Owner features need a second factor (and 18+ confirmation). \\
+\code{step_up_required} (403) & A fresh second-factor check is needed; the interface handles it automatically. \\
+\code{rate_limited} (429) & Throttled; see \code{retryAfter} or the \code{Retry-After} header. \\
+\code{email_unavailable} (503) & The confirmation email couldn't be sent; signing up again sends a fresh link. \\
+\code{delivery_failed} (503) & A one-time code couldn't be emailed; try again shortly. \\
+\code{bad_origin} (403) & A cross-site request was blocked. \\
+\code{invalid_input} (400) & Validation failed; the message names the field. \\
+\code{invalid_phone}, \code{invalid_country} (400) & The number doesn't fit the selected country (the message names it), or the country code isn't recognised. A number starting with \code{+} or \code{00} overrides the country. \\
+\code{handle_taken} (409) & Includes a fresh \code{suggestion}. \\
+\code{invalid_handle} (400) & Handle breaks the rules (3--24 letters, numbers, \_ or ., no \code{@}); includes a corrected \code{suggestion}. \\
+\code{token_cap}, \code{number_cap}, \code{tier_unavailable} & 10 live tokens per number; 5 numbers; Tier 4 isn't available. \\
+\code{invalid_step}, \code{already_revealed} & The gate option isn't available at this step; one reveal per request. \\
+\code{already_decided}, \code{expired} & A consent request was already handled, or has expired. \\
+\code{blocked}, \code{closed} & A chat is blocked, or closed by the owner or a moderator. \\
+\code{already_in_call}, \code{not_answered}, \code{call_over} & One call at a time; media setup waits for the answer; the call has already ended. \\
+\code{invalid_action}, \code{call_not_found} & Only the person being called can answer; the call doesn't exist or isn't yours. \\
+\code{dual_control} & An administrator tried to approve their own request. \\
+\code{last_factor}, \code{recovery_cooldown} & You can't remove the only second factor; recovery isn't finished yet. \\
+\bottomrule
+\end{longtable}
+
+\section{Pages}
+
+\begin{longtable}{@{}L{4.0cm}L{2.4cm}p{8.8cm}@{}}
+\caption{Web pages}\label{tab:pages}\\
+\toprule
+\thead{Path} & \thead{Who} & \thead{What it does} \\
+\midrule\endfirsthead
+\toprule
+\thead{Path} & \thead{Who} & \thead{What it does} \\
+\midrule\endhead
+\fpath{/} & Everyone & Introduction and a box to enter a link or code \\
+\fpath{/signup}, \fpath{/login}, \fpath{/login/mfa} & Visitors & Registration (email or phone), sign-in, second factor and recovery \\
+\fpath{/verify-email} & Visitors & Confirms the emailed link \\
+\fpath{/onboarding} & New owners & Second factor, recovery codes, first number \\
+\fpath{/t/[code]} & Callers & The decode gate \\
+\fpath{/r/[id]} & Callers & Resume a request (linked from notifications) \\
+\fpath{/dashboard} & Owners & Stats, tokens with actions, live audit feed, panic button \\
+\fpath{/dashboard/tokens/new} & Owners & Create a token with a tier recommendation \\
+\fpath{/dashboard/requests} & Owners & Tier 3 requests and decisions \\
+\fpath{/dashboard/numbers} & Owners & Protected numbers \\
+\fpath{/dashboard/audit} & Owners & Full audit trail; evidence downloads \\
+\fpath{/chats}, \fpath{/chats/[id]} & Signed in & Conversations; block and report \\
+\fpath{/report} & Signed in & Report a gate request \\
+\fpath{/settings} & Signed in & Account, phone, factors, password, devices, privacy, notifications, export, delete \\
+\fpath{/moderation} & Moderators & Report queue \\
+\fpath{/admin} & Administrators & Dual-control actions \\
+\fpath{/privacy} & Everyone & Plain-language privacy notice \\
+\fpath{/dev/outbox} & Development & Captured emails \\
+\bottomrule
+\end{longtable}
+
+\section{Command-line scripts}
+
+\begin{longtable}{@{}L{4.8cm}p{10.4cm}@{}}
+\caption{npm scripts}\label{tab:scripts}\\
+\toprule
+\thead{Command} & \thead{Purpose} \\
+\midrule\endfirsthead
+\toprule
+\thead{Command} & \thead{Purpose} \\
+\midrule\endhead
+\code{npm run dev} / \code{build} / \code{start} & Development server; production build; production server (port 3000) \\
+\code{npm run keys:generate} & Write fresh secrets into \fpath{.env} (keeps existing ones unless \code{--force}) \\
+\code{npm run db:migrate} & Apply SQL migrations, retrying while the database starts \\
+\code{npm run db:generate} & Create a migration after changing \fpath{src/db/schema.ts} \\
+\code{npm run seed} & Demo accounts and tokens (development only) \\
+\code{npm run admin:create -- --handle=x --role=admin} & Grant a role from the server shell (audited) \\
+\code{npm run jobs} / \code{jobs:once} & Housekeeping every 10 minutes / one pass \\
+\code{npm run dev:totp -- <key>} & Current authenticator code for a key \\
+\code{npm run email:test -- --to=<address>} & Send one test email through the configured provider (Resend) \\
+\code{npm test}, \code{test:unit}, \code{test:integration} & Vitest suites \\
+\code{npm run test:e2e} & Playwright browser tests against a running app \\
+\code{npm run attack:enumerate} & Enumeration campaign (refuses production configuration) \\
+\code{npm run scan:plaintext} & Search the database and logs for phone numbers (\code{--path=}, \code{--logs=}) \\
+\code{npm run audit:verify} & Verify the audit chain and anchor files \\
+\code{npm run load:test} & Gate latency test (\code{--rps}, \code{--seconds}) \\
+\code{npm run verify:all} & Every check above, with a summary \\
+\code{npm run typecheck} / \code{lint} & TypeScript and ESLint \\
+\bottomrule
+\end{longtable}
+
+\section{Notifications}
+
+\begin{tabularx}{\linewidth}{@{}L{4.6cm}L{1.6cm}L{1.6cm}Y@{}}
+\toprule
+\thead{Event} & \thead{In-app} & \thead{Email} & \thead{To} \\
+\midrule
+Tier 3 request & \yes & \yes & Owner \\
+Token frozen & \yes & \yes & Owner \\
+Panic revoke used & \yes & \yes & Owner \\
+Recovery started or completed & \yes & \yes & Account holder \\
+Request accepted & \yes & \no & Caller \\
+Caller locked out & \yes & \no & Caller \\
+Moderation warning & \yes & \yes & Reported user \\
+Report reviewed & \yes & \no & Reporter \\
+New chat started & \yes & \yes & Owner \\
+Missed in-app call (no answer, busy, or cancelled while the app was closed) & \yes & \yes & Owner \\
+Incoming in-app call & ring & \no & Owner, while the app is open \\
+New chat message & \yes & \yes & Other party (at most every 15 min per chat; no message text) \\
+\bottomrule
+\end{tabularx}
+
+\section{Glossary}
+
+\begin{longtable}{@{}L{3.6cm}p{11.6cm}@{}}
+\toprule
+\thead{Term} & \thead{Meaning} \\
+\midrule\endhead
+Token / code & A random identifier an owner shares instead of a phone number: a 16-character link code or a 10-character short code. \\
+Decode gate & The checks a caller must pass before any outcome is delivered. \\
+Tier & The protection level of a token (1 Open, 2 Gated, 3 Consent, 4 Vault in Phase 2). \\
+Outcome & What the caller gets after the gate: a chat, an in-app call, or a reveal if the code has a number. \\
+Watermarked reveal & The number drawn into an image stamped with the viewer's handle and the time, shown for 60 seconds. \\
+Step-up & A fresh second-factor check before a sensitive action. \\
+Passkey & A WebAuthn credential unlocked with the device's screen lock. Phishing-resistant. \\
+TOTP & Six-digit codes from an authenticator app (RFC 6238). \\
+Envelope encryption & Data encrypted with a per-user data key, which is itself encrypted (wrapped) by a key-encryption key (KEK). \\
+Blind index & A keyed hash that allows equality lookups on encrypted values. \\
+Pepper & A server-side secret mixed into a hash, here the token fingerprint. \\
+Crypto-shredding & Making data unreadable by deleting its key. \\
+Hash chain & A log in which each entry includes the hash of the previous one, so changes are detectable. \\
+Anchor & A day's final chain hash, written to write-once storage. \\
+Evidence pack & A signed export of an owner's audit trail for platforms or police. \\
+Break-glass & Exceptional administrator actions that need two people (dual control). \\
+E.164 & The international phone-number format, e.g. \code{+26876123456}. \\
+OWASP ASVS & Application Security Verification Standard; Level 2 is the go-live bar. \\
+\bottomrule
+\end{longtable}

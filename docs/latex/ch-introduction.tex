@@ -1,0 +1,120 @@
+\chapter{Introduction}
+\label{ch:intro}
+
+\section{Purpose of this document}
+
+This document is the long-term reference for the PryingEyes Phase 1 website. It explains:
+\begin{itemize}
+  \item what the system does and how it is built (Chapters~\ref{ch:intro}--\ref{ch:architecture});
+  \item how to install, configure and run it on an Ubuntu desktop or server (Chapters~\ref{ch:setup}--\ref{ch:config});
+  \item every use case, as UML diagrams and as written specifications (Chapters~\ref{ch:usecases}--\ref{ch:specs});
+  \item the main runtime flows, operations, testing and troubleshooting (Chapters~\ref{ch:flows}--\ref{ch:ops});
+  \item a reference for the API, pages, scripts, data retention and terms (Chapter~\ref{ch:reference}).
+\end{itemize}
+
+It is written for developers maintaining the code, operators running it, reviewers and penetration testers assessing it, and supervisors or funders who want to understand what it does. It describes the system as built, matching the code in the \code{pryingeyes} repository at version 0.1.0.
+
+\section{What PryingEyes does}
+
+People share phone numbers on social media, classifieds, dating apps and community groups, where scrapers, scammers and stalkers can collect them. PryingEyes lets an \emph{owner} post a short code instead of their number. Anyone who wants to reach them, a \emph{caller}, must pass through the platform's \textbf{decode gate}. The gate is verified, rate-limited and fully logged. Depending on the protection tier the owner chose, it then:
+\begin{itemize}
+  \item shows the number as a watermarked image;
+  \item connects an \textbf{in-app call} over data, in which neither side sees the other's number;
+  \item asks the owner for consent first; or
+  \item opens an in-app \textbf{chat}.
+\end{itemize}
+
+Three design decisions carry most of the security:
+\begin{enumerate}
+  \item \textbf{Opaque random tokens.} A code is random (80 bits for links, 50 bits for short codes) and contains nothing about the number. The link between a code and a number exists only inside the server, so a code can't be decoded offline.
+  \item \textbf{A gated, audited decode step.} Nobody gets a number without an account, a human check and server-side budgets. Some tiers add a one-time code and the owner's consent. Every attempt is written to a tamper-evident log the owner can see and export as signed evidence.
+  \item \textbf{No plaintext numbers anywhere.} Numbers are encrypted per user (AES-256-GCM, envelope encryption). Codes are stored only as keyed fingerprints. Logs are filtered so they can't contain anything shaped like a phone number.
+\end{enumerate}
+
+\section{Protection tiers}
+
+Owners choose a tier per token, so one person can run a public business line and a personal-safety code at the same time.
+
+\begin{table}[H]
+\centering\small
+\caption{Protection tiers}\label{tab:tiers}
+\begin{tabularx}{\linewidth}{@{}L{1.9cm}L{4.4cm}L{4.2cm}Y@{}}
+\toprule
+\thead{Tier} & \thead{What the caller must pass} & \thead{What the caller can get} & \thead{Recommended for} \\
+\midrule
+\tier{tone}{T1 Open} & Sign-in, human check, budgets & Chat or in-app call; a watermarked reveal if the code has a number & Business and public lines \\
+\tier{ttwo}{T2 Gated} & Tier 1 + a one-time code emailed to the caller; at most 3 Tier 2 contacts per caller per day & Chat, in-app call, or a reveal if the code has a number & Classifieds, community groups \\
+\tier{tthree}{T3 Consent} & Tier 2 + the owner's approval (24-hour window), optionally with a 280-character note & Chat and in-app call; one reveal only if the code has a number and the owner chooses \emph{Reveal once} & Marketplaces, dating, new contacts \\
+\tier{muted}{T4 Vault} & \multicolumn{3}{l}{\emph{Phase 2.} Shown in the interface as ``Coming soon''; can't be selected.} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+When an owner creates a token, the interface recommends a tier from where they plan to post it:
+\begin{itemize}
+  \item business $\rightarrow$ Tier 1;
+  \item classifieds or community $\rightarrow$ Tier 2;
+  \item marketplace, dating or someone new $\rightarrow$ Tier 3, with a 48-hour expiring token.
+\end{itemize}
+
+\section{Token classes}
+
+\begin{table}[H]
+\centering\small
+\caption{Token classes}\label{tab:classes}
+\begin{tabularx}{\linewidth}{@{}L{2.4cm}L{4.6cm}Y@{}}
+\toprule
+\thead{Class} & \thead{Lifetime} & \thead{Typical use} \\
+\midrule
+Standard & Until revoked or rotated & Business line, long-term community contact \\
+Expiring & Set time-to-live, default 48 hours; the owner can extend it & Classified adverts, short campaigns \\
+Disposable & One delivered outcome, then \emph{consumed} & A first contact, a one-off meeting \\
+Purpose-bound & Owner label and optional expiry; rotation reminder every 90 days & A marketplace persona; work versus personal \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Each protected number can have at most 10 live tokens, and each account can protect up to 5 numbers. A link looks like \fpath{https://<host>/t/K7QM-4XR2-9BDN-2F9X}; a short code looks like \code{RW4TP-8NMKD}. Short codes are for platforms that don't allow links.
+
+\section{Scope of Phase 1}
+
+\begin{tabularx}{\linewidth}{@{}L{0.48\linewidth}Y@{}}
+\thead{In scope (built and tested)} & \thead{Out of scope (Phase 2 and later)} \\
+\begin{itemize}
+  \item Accounts: email sign-up, generated handles
+  \item Passkeys, authenticator apps, recovery codes
+  \item Encrypted number vault
+  \item Four token classes; Tiers 1--3
+  \item Watermarked reveal, in-app calling, chat
+  \item Owner dashboard and audit feed
+  \item Signed evidence packs; panic revoke-all
+  \item Reports and moderation
+  \item Data export and erasure; retention jobs
+  \item Dual-control administration
+\end{itemize}
+&
+\begin{itemize}
+  \item Tier 4 Vault
+  \item End-to-end encrypted chat (a seam is left in the chat module)
+  \item Installable web app and native apps
+  \item Partner API, browser extension
+  \item Decoy tokens, breach monitoring
+  \item Trusted-contact escalation
+  \item Virtual per-context numbers
+  \item Chat attachments, call recording
+\end{itemize}
+\end{tabularx}
+
+\section{Related documents in the repository}
+
+\begin{tabularx}{\linewidth}{@{}L{4.6cm}Y@{}}
+\toprule
+\fpath{README.md} & Quick start for developers. \\
+\fpath{docs/THREAT_MODEL.md} & Threats T1--T14 with the control and test for each. \\
+\fpath{docs/ASSUMPTIONS.md} & Every decision the specification left open (summarised in Appendix~\ref{app:decisions}). \\
+\fpath{docs/DEPLOY.md} & Server deployment guide, including nginx and write-once anchors. \\
+\fpath{docs/LAUNCH_CHECKLIST.md} & Blockers before public launch: legal review, penetration test, KMS. \\
+\fpath{docs/SECURITY_REVIEW.md} & Builder's self-review for penetration testers. \\
+\fpath{docs/FINAL_REPORT.md} & Milestone reports and verification results. \\
+\bottomrule
+\end{tabularx}

@@ -1,0 +1,201 @@
+\chapter{Architecture}
+\label{ch:architecture}
+
+\section{Components}
+
+PryingEyes is one Next.js application, with its business logic in a TypeScript library, backed by PostgreSQL and Redis. A separate worker process runs scheduled housekeeping. External services handle email (Resend) and the human check (Turnstile); PryingEyes sends no text messages and places no phone calls. Each one sits behind an adapter, and each adapter has a development stand-in, so the whole system runs offline on a laptop.
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm,node distance=0.5cm]
+  % clients
+  \node[comp,minimum width=3.2cm] (owner) at (0,9.4) {Owner's browser\\\scriptsize dashboard, tokens, requests};
+  \node[comp,minimum width=3.2cm] (caller) at (4.2,9.4) {Caller's browser\\\scriptsize gate, reveal, call, chat};
+  \node[comp,minimum width=3.2cm] (staff) at (8.4,9.4) {Staff browser\\\scriptsize moderation, admin};
+  \node[comp,minimum width=2.6cm,fill=softgrey] (verifier) at (12.4,9.4) {Third-party\\\scriptsize verifier};
+
+  % app
+  \node[draw=ink,line width=0.8pt,rounded corners=4pt,minimum width=14.6cm,minimum height=6.5cm,fill=white] (app) at (6.2,4.4) {};
+  \node[systitle] at (app.north west) {Next.js application (Node.js 22)};
+  \node[compa,minimum width=13.6cm] (mw) at (6.2,6.62) {Middleware — strict Content-Security-Policy with a per-request nonce, security headers};
+  \node[comp,minimum width=4.2cm,minimum height=1.2cm] (pages) at (1.6,5.55) {Pages (React)\\\scriptsize \code{src/app/**/page.tsx}};
+  \node[comp,minimum width=8.9cm,minimum height=1.2cm] (api) at (8.55,5.55) {API route handlers \scriptsize\code{src/app/api/**}\\\scriptsize same-origin check, input validation (zod), uniform errors, 200 ms gate floor};
+  \node[font=\sffamily\scriptsize\bfseries,text=muted,anchor=west] at (-0.75,4.55) {Core library \code{src/lib}};
+  \foreach \n/\x/\y/\t in {
+      l1/0.25/3.85/{auth, session,\\webauthn, totp},
+      l2/2.55/3.85/{vault, keys,\\crypto},
+      l3/4.85/3.85/{tokens,\\gate},
+      l4/7.15/3.85/{reveal, calls,\\chat},
+      l5/9.45/3.85/{audit, evidence,\\feed},
+      l6/11.75/3.85/{dsr, retention,\\moderation, admin},
+      m1/0.25/2.6/{ratelimit},
+      m2/2.55/2.6/{redact, log},
+      m3/4.85/2.6/{notify, otp},
+      m4/7.15/2.6/{captcha},
+      m5/9.45/2.6/{providers/*},
+      m6/11.75/2.6/{env, errors,\\http}} {
+    \node[comp,minimum width=2.15cm,minimum height=0.95cm,font=\sffamily\scriptsize] (\n) at (\x,\y) {\t};
+  }
+
+  % data stores
+  \node[store] (pg) at (0.9,-0.4) {PostgreSQL 16\\\scriptsize 23 tables};
+  \node[store] (rd) at (4.2,-0.4) {Redis 7\\\scriptsize budgets, locks,\\\scriptsize challenges};
+  \node[store,minimum width=2.6cm] (an) at (7.5,-0.4) {Anchor files\\\scriptsize write-once};
+  \node[comp,minimum width=2.6cm] (job) at (11.4,-0.4) {Retention worker\\\scriptsize \code{npm run jobs}};
+
+  % externals
+  \node[sysactor,minimum width=2.5cm] (at) at (15.6,6.4) {\guil{system}\\Resend\\email};
+  \node[sysactor,minimum width=2.5cm] (smtp) at (15.6,4.6) {\guil{system}\\Resend\\email API};
+  \node[sysactor,minimum width=2.5cm] (ts) at (15.6,2.8) {\guil{system}\\Cloudflare\\Turnstile};
+  \node[sysactor,minimum width=2.5cm] (kms) at (15.6,1.0) {\guil{system}\\KMS (Phase 2)\\local KEK now};
+
+  \foreach \c in {owner,caller,staff,verifier} { \draw[arrow] (\c.south) -- (\c.south |- app.north); }
+  \node[lbl] at (6.2,8.15) {HTTPS (TLS 1.3 in production)};
+  \draw[arrow] (pg.north |- app.south) -- (pg.north);
+  \draw[arrow] (rd.north |- app.south) -- (rd.north);
+  \draw[arrow] (an.north |- app.south) -- (an.north);
+  \draw[arrow] (job.west) -- (an.east);
+  \draw[arrow] (job.north) -- (job.north |- app.south) node[lbl,pos=0.5,right]{same library};
+  \foreach \e in {at,smtp,ts,kms} { \draw[arrow,<->] (app.east |- \e) -- (\e.west); }
+\end{tikzpicture}
+\end{fitfig}
+\caption{Component architecture}
+\label{fig:components}
+\end{figure}
+
+Route handlers are thin. They authenticate, validate input and call one function in \fpath{src/lib}, which holds all the business rules. The same library is used by the retention worker and the command-line scripts, so behaviour is identical wherever it runs.
+
+\section{Technology stack}
+
+\begin{table}[H]
+\centering\small
+\caption{Technology stack}\label{tab:stack}
+\begin{tabularx}{\linewidth}{@{}L{3.6cm}L{4.4cm}Y@{}}
+\toprule
+\thead{Concern} & \thead{Choice} & \thead{Notes} \\
+\midrule
+Runtime & Node.js 22 & Next.js 15 (App Router), React 19, TypeScript (strict) \\
+Database & PostgreSQL 16 & Drizzle ORM; plain SQL migrations in \fpath{drizzle/} \\
+Cache and counters & Redis 7 & Rate budgets, lockouts, WebAuthn challenges, pending phone numbers \\
+Passwords & Argon2id & \code{@node-rs/argon2}; 19 MiB, 2 iterations, parallelism 1 \\
+Passkeys & WebAuthn & \code{@simplewebauthn}; user verification required \\
+Authenticator apps & TOTP (RFC 6238) & Built in; replay-protected \\
+Encryption & AES-256-GCM & Per-user data keys wrapped by a key-encryption key (KEK) \\
+Signatures & Ed25519 & Evidence packs \\
+Reveal images & \code{@napi-rs/canvas} & Server-rendered PNG with a diagonal watermark \\
+Evidence PDF & \code{pdf-lib} & \\
+Phone numbers & \code{libphonenumber-js} & Normalised to E.164; default country Eswatini (SZ) \\
+Logging & \code{pino} & Every field passes through the redactor \\
+Tests & Vitest, Playwright, axe & Integration tests against real PostgreSQL and Redis \\
+Email & Resend (REST API) & Plain text + HTML; idempotent retries; development outbox locally \\
+Containers & Docker Compose & PostgreSQL, Redis; optional app and worker images \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Repository layout}
+
+\begin{lstlisting}
+pryingeyes/
+  src/
+    app/            pages (React) and api/ route handlers
+    components/     shared UI: Gate, HandleField, StepUp dialog, Captcha, ...
+    lib/            security core and business rules (see Figure 2.1)
+    db/             schema.ts (Drizzle) and the connection pool
+    i18n/           interface strings (English; other languages can be added)
+    middleware.ts   CSP and security headers
+  drizzle/          SQL migrations (0000_init, 0001_audit_append_only)
+  scripts/          migrate, keys, seed, jobs, attack, scan, verify, load test
+  tests/            unit/, integration/ (real DB), e2e/ (Playwright)
+  docs/             markdown docs and this LaTeX documentation (docs/latex)
+  assets/fonts/     font used to render reveal images
+  docker-compose.yml, Dockerfile, .env.example, package.json
+\end{lstlisting}
+
+\section{Data model}
+
+Figure~\ref{fig:er} shows the main entities and how they relate. All primary keys are UUIDs except where noted. Every table holding personal data cascades from \code{users}, so erasing an account removes it in one statement.
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \tikzset{ent/.style={entity,text width=3.5cm,minimum height=1.9cm}}
+  % row 1
+  \node[ent,anchor=north] (u)  at (0,6.6)    {\textbf{users}\nodepart{two}handle (unique)\\email, password\_hash\\status, roles[], panic\_at\\audit\_retention\_months};
+  \node[ent,anchor=north] (pn) at (4.5,6.6)  {\textbf{phone\_numbers}\nodepart{two}kind: account | protected\\ciphertext (AES-GCM)\\blind\_index (HMAC)\\hint (last 2 digits)};
+  \node[ent,anchor=north] (t)  at (9.0,6.6)  {\textbf{tokens}\nodepart{two}link\_hash, short\_hash\\class, tier, label\\status, expires\_at\\uses, decode\_budget};
+  \node[ent,anchor=north] (cv) at (13.5,6.6) {\textbf{conversations}\nodepart{two}owner\_id, caller\_id\\label\\disappear\_seconds\\last\_message\_at};
+  % row 2
+  \node[ent,anchor=north] (k)  at (0,2.9)    {\textbf{user\_keys}\nodepart{two}wrapped\_key (bytea)\\kek\_version};
+  \node[ent,anchor=north] (s)  at (4.5,2.9)  {\textbf{sessions}\nodepart{two}id = SHA-256(cookie)\\mfa\_at, mfa\_pending\\ua\_hash, expires\_at};
+  \node[ent,anchor=north] (dr) at (9.0,2.9)  {\textbf{decode\_requests}\nodepart{two}stage, tier, verification\\region, note\_enc\\outcome\\consent\_expires\_at};
+  \node[ent,anchor=north] (m)  at (13.5,2.9) {\textbf{messages}\nodepart{two}ciphertext (AES-GCM)\\expires\_at, read\_at};
+  % row 3
+  \node[ent,anchor=north] (ae) at (0,-0.8)    {\textbf{audit\_events}\nodepart{two}seq, type, payload\\payload\_hash, prev\_hash, hash\\owner\_id, actor\_id (no FK)};
+  \node[ent,anchor=north] (rp) at (4.5,-0.8)  {\textbf{reports}\nodepart{two}reason, details\_enc, status\\$\rightarrow$ users, conversations,\\tokens (nullable)};
+  \node[ent,anchor=north] (rg) at (9.0,-0.8)  {\textbf{reveal\_grants}\nodepart{two}id (random)\\60 s, single use};
+
+  \draw[arrow] (pn.west |- 5.6,5.6) -- node[lbl,above]{*} (u.east |- 5.6,5.6);
+  \draw[arrow] (t.west |- 5.6,5.6) -- node[lbl,above]{*} (pn.east |- 5.6,5.6);
+  \draw[arrow] (cv.west |- 5.6,5.6) -- node[lbl,above]{*} (t.east |- 5.6,5.6);
+  \draw[arrow] (k.north) -- node[lbl,right]{1} (u.south);
+  \draw[arrow] (s.north west) -- node[lbl,above,sloped]{*} (u.south east);
+  \draw[arrow] (dr.north) -- node[lbl,right]{*} (t.south);
+  \draw[arrow] (m.north) -- node[lbl,right]{*} (cv.south);
+  \draw[arrow] (rg.north) -- node[lbl,right]{1} (dr.south);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Main entities (arrows point to the referenced table; * = many)}
+\label{fig:er}
+\end{figure}
+
+\begin{table}[H]
+\centering\small
+\caption{All database tables}\label{tab:tables}
+\begin{tabularx}{\linewidth}{@{}L{3.9cm}Y@{}}
+\toprule
+\thead{Table} & \thead{Holds} \\
+\midrule
+\code{users}, \code{user_keys} & Accounts; each user's wrapped data key \\
+\code{phone_numbers} & Encrypted numbers: one \emph{account} phone for sign-in, plus optional numbers an owner lets approved people see \\
+\code{passkeys}, \code{totp_secrets}, \code{recovery_codes} & Second factors (TOTP secret encrypted; recovery codes as keyed hashes) \\
+\code{sessions}, \code{account_recoveries} & Sign-in sessions; open recoveries and their cooldown \\
+\code{verification_tokens}, \code{otp_challenges} & Email links and one-time codes, stored as hashes \\
+\code{tokens}, \code{decode_requests}, \code{reveal_grants} & Codes (as fingerprints), gate requests and one-time reveal grants \\
+\code{conversations}, \code{messages}, \code{blocks} & Chats (messages encrypted) and blocks \\
+\code{reports}, \code{notifications} & Abuse reports (details encrypted) and in-app notifications \\
+\code{audit_events}, \code{audit_anchors} & Hash-chained audit log; daily head hashes \\
+\code{admin_actions} & Dual-control break-glass requests \\
+\code{dev_outbox} & Development only: captured emails \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Keys and cryptography}
+
+\begin{table}[H]
+\centering\small
+\caption{Secrets and what they protect}\label{tab:keys}
+\begin{tabularx}{\linewidth}{@{}L{4cm}Y@{}}
+\toprule
+\thead{Setting} & \thead{Purpose} \\
+\midrule
+\code{MASTER_KEK} & Key-encryption key. Wraps each user's 256-bit data key, which encrypts that user's numbers, TOTP secret, intro notes and chat keys. Rotate by adding a new version and moving the old one to \code{KEK_PREVIOUS}, then run the \emph{re-wrap keys} admin action. \\
+\code{TOKEN_PEPPER} & HMAC key for token fingerprints: \code{HMAC-SHA256(code, pepper)}. One indexed lookup, constant-time compare. \\
+\code{BLIND_INDEX_KEY} & HMAC key for the phone-number blind index (de-duplication without decrypting). \\
+\code{SECRETS_HMAC_KEY} & Hashes for one-time codes and recovery codes, user-agent binding, and the moderation data key. \\
+\code{EVIDENCE_SIGNING_KEY} & Ed25519 private key (PKCS\#8) for signing evidence packs. The public key is at \fpath{/api/evidence/public-key}. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Ciphertexts are bound to their row with associated data. For example, a phone number is encrypted with \code{phone:<row id>} as associated data, so a ciphertext copied into another row fails to decrypt. Only \fpath{vault.decryptNumberFor} decrypts numbers, and only for two purposes: reveal and data export.
+
+\section{Audit chain}
+
+Every security-relevant action appends a row to \code{audit_events} inside the same database transaction. Each row stores:
+\[\text{hash}_n = \text{SHA-256}(\text{prev\_hash} \,|\, \text{seq} \,|\, \text{at} \,|\, \text{type} \,|\, \text{actor} \,|\, \text{owner} \,|\, \text{subject} \,|\, \text{payload\_hash})\]
+
+A database trigger forbids \code{UPDATE} and \code{DELETE} on the table. The one exception is setting a payload to \code{NULL}, which erasure and retention need. Because each link hashes the payload's \emph{hash}, the chain still verifies after personal data is removed. Each completed day's head hash is written to \code{audit_anchors} and to a write-once file in \code{AUDIT_ANCHOR_DIR}.

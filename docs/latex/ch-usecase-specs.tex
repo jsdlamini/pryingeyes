@@ -1,0 +1,569 @@
+\chapter{Use-case specifications}
+\label{ch:specs}
+
+Each use case below lists its actors, preconditions, main flow, alternative and error flows, and the result. IDs match the diagrams in Chapter~\ref{ch:usecases}: \textbf{A} accounts, \textbf{T} tokens, \textbf{G} gate, \textbf{C} chat and safety, \textbf{D} data and evidence, \textbf{O} operations. Unless stated otherwise, every use case writes at least one event to the audit chain.
+
+\section{Actor and use-case matrix}
+
+\begingroup\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{longtable}{@{}L{0.75cm}L{5.4cm}*{10}{>{\centering\arraybackslash}p{0.72cm}}@{}}
+\caption{Which actor takes part in which use case (\pri\ primary, \sdy\ secondary)}\label{tab:uc-matrix}\\
+\toprule
+\thead{ID} & \thead{Use case} & \rotatebox{70}{\thead{Visitor}} & \rotatebox{70}{\thead{Reg.\ user}} & \rotatebox{70}{\thead{Caller}} & \rotatebox{70}{\thead{Owner}} & \rotatebox{70}{\thead{Moderator}} & \rotatebox{70}{\thead{Admin}} & \rotatebox{70}{\thead{Operator}} & \rotatebox{70}{\thead{Verifier}} & \rotatebox{70}{\thead{Scheduler}} & \rotatebox{70}{\thead{Messaging}} \\
+\midrule\endfirsthead
+\toprule
+\thead{ID} & \thead{Use case} & \rotatebox{70}{\thead{Visitor}} & \rotatebox{70}{\thead{Reg.\ user}} & \rotatebox{70}{\thead{Caller}} & \rotatebox{70}{\thead{Owner}} & \rotatebox{70}{\thead{Moderator}} & \rotatebox{70}{\thead{Admin}} & \rotatebox{70}{\thead{Operator}} & \rotatebox{70}{\thead{Verifier}} & \rotatebox{70}{\thead{Scheduler}} & \rotatebox{70}{\thead{Messaging}} \\
+\midrule\endhead
+A1 & Register with email & \pri & & & & & & & & & \sdy \\
+A2 & Sign up from a code or invite & \pri & & \pri & & & & & & & \sdy \\
+A3 & Verify email address & \pri & & & & & & & & & \sdy \\
+A4 & Sign in with a password & & \pri & & & & & & & & \\
+A5 & Sign in with a passkey & & \pri & & & & & & & & \\
+A6 & Enrol a second factor & & \pri & & \pri & & & & & & \\
+A7 & Confirm it's you (step-up) & & \pri & & & & & & & & \\
+A8 & Recover account with a recovery code & & \pri & & & & & & & & \sdy \\
+A9 & Manage sessions and devices & & \pri & & & & & & & & \\
+A10 & Change password & & \pri & & & & & & & & \\
+A11 & Generate a handle & \pri & & & & & & & & & \\
+\midrule
+T1 & Add a protected number & & & & \pri & & & & & & \\
+T2 & Remove a protected number & & & & \pri & & & & & & \\
+T3 & Create a token & & & & \pri & & & & & & \\
+T4 & Pause, resume or extend a token & & & & \pri & & & & & & \\
+T5 & Rotate a token & & & & \pri & & & & & & \\
+T6 & Clone a token & & & & \pri & & & & & & \\
+T7 & Revoke a token & & & & \pri & & & & & & \\
+T8 & Panic: revoke all tokens & & & & \pri & & & & & & \sdy \\
+\midrule
+G1 & Open a shared link or code & \pri & & \pri & & & & & & & \\
+G2 & Pass the decode gate & & & \pri & \sdy & & & & & & \\
+G3 & Confirm a one-time code & & & \pri & & & & & & & \sdy \\
+G4 & Ask the owner for consent & & & \pri & \sdy & & & & & & \sdy \\
+G5 & Decide a contact request & & & \sdy & \pri & & & & & & \\
+G6 & View the number (watermarked) & & & \pri & \sdy & & & & & & \\
+G8 & Chat in the app & & & \pri & \pri & & & & & & \\
+G9 & Report a request & & & \pri & \pri & \sdy & & & & & \\
+\midrule
+C1 & Exchange messages & & \pri & & & & & & & \sdy & \\
+C2 & Block a person & & \pri & & & & & & & & \\
+C3 & Report abuse & & \pri & & & \sdy & & & & & \\
+C4 & Review the moderation queue & & & & & \pri & & & & & \\
+C5 & Take a moderation action & & \sdy & & & \pri & & & & & \sdy \\
+\midrule
+D1 & View the audit trail & & & & \pri & & & & & & \\
+D2 & Export an evidence pack & & & & \pri & & & & & & \\
+D3 & Verify an evidence pack & & & & & & & & \pri & & \\
+D4 & Export my data & & \pri & & & & & & & & \\
+D5 & Erase my account & & \pri & & & & & & & & \\
+D6 & Set privacy preferences & & \pri & & & & & & & & \\
+D7 & Read notifications & & \pri & & & & & & & & \sdy \\
+\midrule
+O1 & Request a break-glass action & & & & & & \pri & & & & \\
+O2 & Approve or reject an action & & & & & & \pri & & & & \\
+O3 & Bootstrap an administrator & & & & & & & \pri & & & \\
+O4 & Run migrations and seed & & & & & & & \pri & & & \\
+O5 & Verify the audit chain & & & & & & & \pri & & & \\
+O6 & Run housekeeping & & & & & & & & & \pri & \\
+O7 & Rotate the key-encryption key & & & & & & \pri & \pri & & & \\
+\bottomrule
+\end{longtable}
+\endgroup
+
+% =====================================================================
+\section{Accounts and authentication}
+
+\begin{ucspec}{A1}{Register with email}
+\ucf{Actors}{Visitor; Messaging provider (email).}
+\ucf{Precondition}{Not signed in.}
+\ucf{Main flow}{\begin{flow}
+\item The visitor opens \ui{Create account} $\rightarrow$ \ui{Protect my number}.
+\item The handle field is already filled with a free generated handle (A11).
+\item The visitor enters an email and a password of at least 10 characters, then the handle (already filled in), and confirms they are 18 or older.
+\item The system hashes the password with Argon2id, creates a \emph{pending} account and emails a 24-hour confirmation link (A3).
+\item The page says ``Check your email''.
+\end{flow}}
+\ucf{Alternatives}{\begin{alts}
+\item Email already registered: the page shows the same ``Check your email'' message, and the real account holder gets an email saying someone tried to sign up. This prevents account enumeration.
+\item Typed handle taken: error \code{handle_taken} with a fresh \code{suggestion}, which the form drops in.
+\item Typed handle invalid (an \code{@}, a hyphen, too short or too long): the box cleans it as it is typed and refuses anything with \code{@}, which is usually browser autofill. The server also answers \code{invalid_handle} with a corrected \code{suggestion}.
+\item Weak password, no 18+ confirmation, or too many sign-ups per hour from one network address (\code{RL_SIGNUP_PER_IP_HOUR}, default 30): refused with a message.
+\end{alts}}
+\ucf{Result}{A pending account that can't sign in until the email is confirmed.}
+\end{ucspec}
+
+\begin{ucspec}{A2}{Sign up from a code or invite}
+\ucf{Actors}{Visitor (soon a Caller or group member); Messaging provider (email).}
+\ucf{Precondition}{The person opened a contact code (\fpath{/t/<code>}) or a group invite (\fpath{/g/<invite>}) while signed out.}
+\ucf{Main flow}{\begin{flow}
+\item The gate or join screen offers \ui{Create an account} and \ui{Sign in}. Both carry the code or invite as \code{next}.
+\item They sign up with email and password (A1). The confirmation email's link carries \code{next} too; the server accepts only a local path.
+\item They confirm the email (A3), sign in, and land back on the same code or invite, already filled in. In the phone app they return to the screen they started from.
+\end{flow}}
+\ucf{Alternatives}{\begin{alts}
+\item Already have an account: \ui{Sign in} returns them the same way, including after the second factor.
+\item A \code{next} that points to another site is ignored, and they land on \ui{My codes}.
+\end{alts}}
+\ucf{Result}{A signed-in account back on the code or invite. People see the handle, never the email.}
+\end{ucspec}
+
+\begin{ucspec}{A3}{Verify email address}
+\ucf{Actors}{Visitor (from the emailed link).}
+\ucf{Main flow}{\begin{flow}
+\item The visitor opens \fpath{/verify-email?token=...}.
+\item The system checks the stored hash of the single-use link (valid for 24 hours).
+\item The account becomes \emph{active}.
+\end{flow}}
+\ucf{Alternatives}{Expired or already-used link: ``This link has expired or was already used.''}
+\ucf{Result}{The account can sign in.}
+\end{ucspec}
+
+\begin{ucspec}{A4}{Sign in with a password}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{\begin{flow}
+\item The user enters an email and password.
+\item The system verifies the Argon2id hash and creates a session cookie: random value, SHA-256 stored, HttpOnly, SameSite=Lax.
+\item If the user has a second factor, the session is \emph{MFA-pending} and the user is sent to \fpath{/login/mfa}. They complete it with a passkey or a 6-digit authenticator code. Codes can't be reused.
+\item The user lands on the page they asked for, or the dashboard.
+\end{flow}}
+\ucf{Alternatives}{\begin{alts}
+\item Wrong password or unknown email: the same generic error, with equalised timing.
+\item Unverified email: \code{verification_required}. Suspended account: \code{account_suspended}.
+\item Throttling: 20 attempts per 15 minutes per IP, 10 per email.
+\item Lost second factor: A8.
+\end{alts}}
+\ucf{Result}{A full session. Owner features also need the session to have used the second factor.}
+\end{ucspec}
+
+\begin{ucspec}{A5}{Sign in with a passkey}
+\ucf{Actors}{Registered user (with a passkey).}
+\ucf{Main flow}{\begin{flow}
+\item The user chooses \ui{Sign in with a passkey}.
+\item The browser asks for the device's screen lock (fingerprint, face or PIN).
+\item The system verifies the WebAuthn assertion (user verification required) and the signature counter.
+\item A full session starts with MFA satisfied.
+\end{flow}}
+\ucf{Alternatives}{Challenge older than 5 minutes, unknown credential or failed verification: \code{passkey_failed} or \code{challenge_expired}.}
+\ucf{Result}{A full session. A passkey counts as both factors.}
+\end{ucspec}
+
+\begin{ucspec}{A6}{Enrol a second factor}
+\ucf{Actors}{Registered user (required for owners).}
+\ucf{Main flow}{\begin{flow}
+\item In onboarding or \ui{Settings}, the user chooses \ui{Create a passkey} (recommended) or \ui{Use an authenticator app}.
+\item \textbf{Passkey:} the browser creates a credential and the server verifies and stores its public key.
+\item \textbf{Authenticator app:} the server shows a QR code and the key. The user confirms with a current code, and the secret is stored encrypted.
+\item On the first factor, the system shows 10 one-time recovery codes (\code{XXXXX-XXXXX}) to download, print or copy.
+\end{flow}}
+\ucf{Alternatives}{Adding a further factor needs a step-up (A7). Removing the last factor is refused (\code{last_factor}).}
+\ucf{Result}{The account can become an owner. The current session counts as MFA-verified.}
+\end{ucspec}
+
+\begin{ucspec}{A7}{Confirm it's you (step-up)}
+\ucf{Actors}{Registered user.}
+\ucf{Trigger}{The server answers \code{step_up_required}. This happens for sensitive actions when the last second-factor check is older than the window (Table~\ref{tab:cfg-policy}, fixed limits), and after a panic revoke-all.}
+\ucf{Main flow}{\begin{flow}
+\item The \ui{Confirm it's you} dialog opens automatically.
+\item The user uses a passkey or enters an authenticator code.
+\item The original request is retried automatically.
+\end{flow}}
+\ucf{Result}{The session's \code{mfa_at} is refreshed.}
+\end{ucspec}
+
+\begin{ucspec}{A8}{Recover account with a recovery code}
+\ucf{Actors}{Registered user who has lost their second factor; Messaging provider (alerts).}
+\ucf{Precondition}{Signed in with a password, with the session waiting for its second factor.}
+\ucf{Main flow}{\begin{flow}
+\item On \fpath{/login/mfa}, the user chooses \ui{Use a recovery code} and enters one.
+\item The code is used up and recovery starts with a \textbf{24-hour cooldown}. Every device and the email address are alerted.
+\item After 24 hours, the user chooses \ui{Finish recovery}. The system removes the passkeys, authenticator secret and remaining codes.
+\item The user enrols a new factor (A6).
+\end{flow}}
+\ucf{Alternatives}{The real owner cancels from \ui{Settings} during the cooldown. Finishing early is refused with \code{recovery_cooldown}. There is no SMS recovery (PryingEyes sends none), which defeats SIM-swap takeovers.}
+\ucf{Result}{The second factor is reset; owner features are locked until a new one is enrolled.}
+\end{ucspec}
+
+\begin{ucspec}{A9}{Manage sessions and devices}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{\begin{flow}
+\item \ui{Settings} $\rightarrow$ \ui{Signed-in devices} lists each session with its device label and last activity.
+\item The user signs out any other device.
+\end{flow}}
+\ucf{Rules}{Sessions end after 12 hours idle or 30 days at most. A session cookie used from a different browser is rejected.}
+\end{ucspec}
+
+\begin{ucspec}{A10}{Change password}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{The user enters the current password and a new one. Without the current password, a step-up (A7) is accepted instead. All other devices are signed out.}
+\end{ucspec}
+
+\begin{ucspec}{A11}{Generate a handle}
+\ucf{Actors}{Visitor (during A1).}
+\ucf{Main flow}{\begin{flow}
+\item The form calls \fpath{/api/auth/handle}, which returns a free handle such as \code{quiet_heron_42} (adjective, noun, number).
+\item The person keeps it, taps \ui{Suggest another}, or types their own. Typed handles are checked live with \fpath{/api/auth/handle?check=...}.
+\item On submit, an empty field means the server generates one. If a concurrent sign-up takes a generated handle first, the server retries with a new one.
+\end{flow}}
+\ucf{Rules}{Generated handles are never derived from the email, name or phone, because everyone the person contacts sees their handle.}
+\end{ucspec}
+
+
+% =====================================================================
+\section{Numbers and tokens}
+
+All use cases in this section need an owner: a verified account, 18+ confirmation, a second factor, and a session that used it.
+
+\begin{ucspec}{T1}{Add a protected number}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{\begin{flow}
+\item The owner picks the country, types the number without the dialling code, and adds an optional private name. The form checks the number against the country as it's typed.
+\item The system normalises it to E.164 and computes the blind index.
+\item The number is encrypted with the owner's data key, bound to the row id. Only the last two digits are kept readable, as a hint.
+\end{flow}}
+\ucf{Alternatives}{Same number already added, in any format: \code{number_exists}. More than 5 numbers: \code{number_cap}. Invalid number: \code{invalid_phone}, naming the selected country (for example ``That isn't a valid phone number for Eswatini (+268)''). Unknown country: \code{invalid_country}.}
+\end{ucspec}
+
+\begin{ucspec}{T2}{Remove a protected number}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{After confirming, the number and every token for it are deleted. Needs a second-factor check within the last 30 minutes.}
+\end{ucspec}
+
+\begin{ucspec}{T3}{Create a token}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{\begin{flow}
+\item The owner chooses where they will post the code. The system recommends a tier and class (Table~\ref{tab:tiers}).
+\item The owner adjusts the tier (1--3; Tier 4 is disabled), class, expiry, label (up to 40 characters, shown to callers) and number.
+\item The system draws a 16-character link code and a 10-character short code from a cryptographic random generator. It stores only their HMAC fingerprints and a 4-character display prefix.
+\item The owner sees the link, short code and QR code \textbf{once}, with copy and download buttons.
+\end{flow}}
+\ucf{Alternatives}{10 live tokens on the number: \code{token_cap}. After a panic, a step-up is needed first.}
+\ucf{Result}{An active token.}
+\end{ucspec}
+
+\begin{ucspec}{T4}{Pause, resume or extend a token}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{From the token's \ui{\dots} menu:
+\begin{itemize}
+  \item \ui{Pause} stops the token without deleting it.
+  \item \ui{Resume} restarts a paused or frozen token.
+  \item \ui{Extend 48 h} lengthens an expiring token; an expired token becomes active again.
+\end{itemize}}
+\ucf{Rules}{Resuming after a panic needs a step-up.}
+\end{ucspec}
+
+\begin{ucspec}{T5}{Rotate a token}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{In one transaction, the system issues new codes with the same settings and revokes the old token. The new codes are shown once. Use this when a code is lost, leaked or being targeted.}
+\end{ucspec}
+
+\begin{ucspec}{T6}{Clone a token}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{Creates a new token for the same number from an existing one, with any settings changed (via the API: tier, label, class, expiry).}
+\end{ucspec}
+
+\begin{ucspec}{T7}{Revoke a token}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{After confirming, the token is revoked. It takes effect immediately, including for callers already part-way through the gate and for unused reveal grants.}
+\end{ucspec}
+
+\begin{ucspec}{T8}{Panic: revoke all tokens}
+\ucf{Actors}{Owner; Messaging provider (alert email).}
+\ucf{Main flow}{\begin{flow}
+\item The owner chooses \ui{Panic: revoke all} and confirms.
+\item In one transaction, every live token is revoked and every open request is declined. The account is marked with the panic time.
+\item The owner is notified. The response reports how many tokens were revoked and how long it took (under one second).
+\end{flow}}
+\ucf{Rules}{No step-up is needed, because revoking is always safe. Creating, rotating, cloning or resuming tokens afterwards needs a second-factor check made after the panic.}
+\end{ucspec}
+
+% =====================================================================
+\section{Decode gate and contact}
+
+\begin{ucspec}{G1}{Open a shared link or code}
+\ucf{Actors}{Visitor or Caller.}
+\ucf{Main flow}{\begin{flow}
+\item The person opens \fpath{/t/<code>}, or types a link or short code on the home page. Spaces, dashes, lower case and confusable letters (O/0, I/L/1) are accepted.
+\item Signed out: they create an account or sign in, and come back to the same code (A2).
+\item Signed in: they continue to G2.
+\end{flow}}
+\end{ucspec}
+
+\begin{ucspec}{G2}{Pass the decode gate}
+\ucf{Actors}{Caller; CAPTCHA service; Owner (sees the result in their feed).}
+\ucf{Main flow}{\begin{flow}
+\item The caller ticks the human check and chooses \ui{Continue}.
+\item The server checks, in order:
+\begin{itemize}
+  \item the caller's lockout and in-flight limit;
+  \item the IP budget and the caller's daily budget;
+  \item the CAPTCHA;
+  \item the token's status;
+  \item whether the owner has blocked the caller;
+  \item the caller-per-token and per-token budgets.
+\end{itemize}
+\item On success, a gate request is created (valid for 30 minutes) and the caller's region is recorded. The caller sees the token's label and tier.
+\end{flow}}
+\ucf{Alternatives}{\begin{alts}
+\item Unknown, paused, frozen, revoked, expired or consumed code, a block, or a per-token budget used up: all return the same \code{unavailable} response, after the same 200 ms floor.
+\item Budget or lockout: \code{limited}, with the wait time.
+\item CAPTCHA failure: \code{captcha_failed}. This is checked before the token lookup, so it reveals nothing about the code.
+\item Each failure counts toward the caller's lockout (5 in 15 minutes) and the token's freeze (10 in 1 hour). A freeze alerts the owner in-app and by email.
+\item Reloading the page resumes the open request without using more budget.
+\end{alts}}
+\end{ucspec}
+
+\begin{ucspec}{G3}{Confirm a one-time code (Tier 2 and 3)}
+\ucf{Actors}{Caller; Messaging provider.}
+\ucf{Main flow}{The caller chooses \ui{Send me a code}. A 6-digit code goes to their verified email. They enter it and the request is marked \emph{verified} (``account + human check + code'').}
+\ucf{Alternatives}{Wrong code: \code{otp_wrong}, which counts as a failure toward lockout and freeze. The caller can request a new code.}
+\end{ucspec}
+
+\begin{ucspec}{G4}{Ask the owner for consent (Tier 3)}
+\ucf{Actors}{Caller; Owner (notified); Messaging provider (email).}
+\ucf{Main flow}{\begin{flow}
+\item After G3, the caller may add a note of up to 280 characters, stored encrypted under the owner's key.
+\item The caller chooses \ui{Send request}.
+\item The owner is notified in-app and by email.
+\item The caller's page shows \ui{Waiting for the owner} and checks every 5 seconds.
+\end{flow}}
+\ucf{Result}{A pending request that expires after 24 hours and then counts as declined.}
+\end{ucspec}
+
+\begin{ucspec}{G5}{Decide a contact request}
+\ucf{Actors}{Owner; Caller (sees the result).}
+\ucf{Main flow}{\begin{flow}
+\item \ui{Requests} shows each pending request with:
+\begin{itemize}
+  \item the caller's handle;
+  \item how they were verified;
+  \item the age of their account and their region;
+  \item reports against them and earlier requests to this owner;
+  \item their note.
+\end{itemize}
+It never shows their number.
+\item The owner chooses one of:
+\begin{itemize}
+  \item \ui{Allow messages and calls} (the default) --- chat and in-app calls;
+  \item \ui{Show my number once} (only for codes with a number) --- one reveal, then chat and calls;
+  \item \ui{Decline};
+  \item \ui{Decline \& block} --- also blocks the caller from every one of the owner's codes.
+\end{itemize}
+\end{flow}}
+\ucf{Alternatives}{Already decided: \code{already_decided}. Past 24 hours: \code{expired}. Someone else's request: \code{not_found}.}
+\ucf{Result}{An approved caller sees their options. A declined caller sees the same \emph{unavailable} page as for an unknown code.}
+\end{ucspec}
+
+\begin{ucspec}{G6}{View the number (watermarked)}
+\ucf{Actors}{Caller; Owner (the view is logged).}
+\ucf{Precondition}{A Tier 1 or 2 request that passed the gate, or a Tier 3 request approved with \emph{Reveal once}.}
+\ucf{Main flow}{\begin{flow}
+\item The caller chooses \ui{Show the number}.
+\item The server issues a random, single-use grant valid for 60 seconds.
+\item The browser fetches it. The server re-checks the token, decrypts the number and draws it into a PNG, with the caller's handle, the time and the token label repeated diagonally. The response has \code{Cache-Control: no-store}.
+\item The image is shown from a \code{blob:} address and removed after 60 seconds.
+\end{flow}}
+\ucf{Rules}{The number never appears as text in the page or in an API response. Each caller gets one reveal per request. The first delivered outcome counts once against the token's budget; a disposable token is then consumed. Tier 2 contacts count toward the caller's daily cap of 3.}
+\end{ucspec}
+
+\begin{ucspec}{G8}{Chat in the app}
+\ucf{Actors}{Caller, Owner.}
+\ucf{Main flow}{\begin{flow}
+\item On the gate, each option is a card that says what will happen: chat (no numbers shared; disappears after 24 hours on Tier 3), an in-app call over data, or view the number (60 seconds, watermarked; only for codes with a number).
+\item The caller chooses \ui{Chat in the app}. The system opens, or reuses, the conversation between this caller and this token.
+\item On a new conversation the owner is notified in the app and by email (``\emph{@handle} started a chat about \emph{label}''), and the \ui{Chats} menu item shows an unread count. Both parties continue in C1.
+\end{flow}}
+\end{ucspec}
+
+\begin{ucspec}{G10}{Call in the app (over data)}
+\ucf{Actors}{Caller; Owner; TURN relay (coturn).}
+\ucf{Precondition}{The caller has passed the gate, and the token allows calls (Tier 1--2, or an approved Tier 3 request). This works from the gate or from an open chat while the gate request is valid. No phone numbers are needed.}
+\ucf{Main flow}{\begin{flow}
+\item The caller chooses \ui{Call in the app}. The system creates a \emph{ringing} call and opens the call screen. The browser asks for the microphone while the call rings.
+\item The call screen says whether the owner has PryingEyes open, and counts down the ring (\code{CALL_RING_SECONDS}, default 45).
+\item The owner answers (G11). Each side fetches short-lived TURN credentials. The caller's browser sends an offer, the owner's browser answers, and ICE candidates are exchanged through the server.
+\item Audio flows browser to browser through the TURN relay, encrypted with DTLS-SRTP. The screens show \ui{Connected}, a timer, \ui{Mute} and \ui{Hang up}.
+\item Either side hangs up. The system records the duration and the outcome.
+\end{flow}}
+\ucf{Alternatives}{\begin{alts}
+\item The owner's app is closed or nobody answers: the call becomes \emph{missed} (G11).
+\item The owner is already on a call: \emph{busy}, and the owner gets a missed-call notice.
+\item The caller cancels while it rings: \emph{cancelled}; a missed call if the owner wasn't looking.
+\item The caller already has a call open: \code{already_in_call}. More than 10 calls in an hour: \code{rate_limited}.
+\item Microphone blocked: the screen explains how to allow it, and the call is cancelled.
+\item No audio within 20 seconds (relay unreachable, very poor network): ``We couldn't connect the call'', and the call ends.
+\item A network change mid-call: one ICE restart is tried; if that fails, the call ends.
+\item Either side stops polling for 30 seconds (closed tab, lost signal): the server ends the call.
+\end{alts}}
+\ucf{Rules}{Only callers start calls. Relay-only: the server hands out \code{iceTransportPolicy: relay} and strips host and server-reflexive candidates, so neither person learns the other's IP address. Calls are never recorded. Signalling lives in Redis for at most 10 minutes and is deleted on read; the database keeps metadata only. Calls last at most 2 hours.}
+\end{ucspec}
+
+\begin{ucspec}{G11}{Answer or miss an in-app call}
+\ucf{Actors}{Owner; Scheduler (expires rings).}
+\ucf{Main flow}{\begin{flow}
+\item While PryingEyes is open on any page, the app checks for incoming calls every 3 seconds. A ringing call shows a banner (``\emph{@handle} is calling about \emph{label}''), a ring tone and a flashing tab title.
+\item The owner chooses \ui{Answer}, which opens the call screen and connects (G10), or \ui{Decline}.
+\end{flow}}
+\ucf{Alternatives}{The app is closed, so nothing can ring in a browser. When the ring time runs out, the call becomes \emph{missed}. The owner gets an in-app and email notification (``Missed call from \emph{@handle} about \emph{label}'') that links to a chat with the caller, opened quietly if it didn't exist. The chat timeline shows the missed call, so the owner can reply in writing.}
+\ucf{Rules}{The \code{jobs} worker checks for expired rings every 10 seconds, so missed calls are reported even when nobody has the app open. Native apps will ring through a VoIP push at the same point (section~\ref{sec:native}).}
+\end{ucspec}
+
+\begin{ucspec}{G9}{Report a request}
+\ucf{Actors}{Caller or Owner; Moderator.}
+\ucf{Main flow}{From a gate page (\ui{Report}) or a request, the person picks a reason and adds details. The report joins the moderation queue (C4).}
+\end{ucspec}
+
+% =====================================================================
+\section{Chat and safety}
+
+\begin{ucspec}{C1}{Exchange messages}
+\ucf{Actors}{Registered user (owner or caller); Scheduler (purges expired messages).}
+\ucf{Main flow}{Each side writes messages of up to 2,000 characters; the page refreshes every 3 seconds. Messages are encrypted at rest under a key derived from the owner's data key. Read receipts show unless the reader has turned them off.}
+\ucf{Rules}{On Tier 3 tokens, messages disappear after 24 hours. There are no attachments, and the server does not scan content. At most 30 messages per minute per sender. After a token is revoked, the caller can no longer send. The other party is told about new messages at most once every 15 minutes per conversation, and notifications never contain message text.}
+\end{ucspec}
+
+\begin{ucspec}{C2}{Block a person}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{\ui{Block} in a conversation stops messages in both directions. The blocked person also gets \emph{unavailable} when they try any of the blocker's codes.}
+\end{ucspec}
+
+\begin{ucspec}{C3}{Report abuse}
+\ucf{Actors}{Registered user; Moderator.}
+\ucf{Main flow}{\begin{flow}
+\item \ui{Report} opens a form with a reason (harassment, threats, scam, spam, impersonation, other) and optional details.
+\item The reporter ticks the messages to include. Only those are sent.
+\item The report is stored encrypted and the person is blocked.
+\end{flow}}
+\ucf{Rules}{At most 20 reports per reporter per day and 20 attached messages per report.}
+\end{ucspec}
+
+\begin{ucspec}{C4}{Review the moderation queue}
+\ucf{Actors}{Moderator.}
+\ucf{Main flow}{\fpath{/moderation} lists open reports, oldest first. Each shows the reason, both handles, how many reports the reported account has received, the reporter's text and attached messages. Reports older than 60 minutes without a response are flagged.}
+\ucf{Rules}{Moderators never see phone numbers or messages that weren't attached.}
+\end{ucspec}
+
+\begin{ucspec}{C5}{Take a moderation action}
+\ucf{Actors}{Moderator; the reported user and the reporter (both notified).}
+\ucf{Main flow}{The moderator chooses one of:
+\begin{itemize}
+  \item \ui{Dismiss};
+  \item \ui{Warn} --- the reported user gets a warning by email and in-app;
+  \item \ui{Close conversation};
+  \item \ui{Suspend account} --- signs the user out everywhere and pauses their active tokens.
+\end{itemize}
+The reporter is told the report was reviewed.}
+\ucf{Alternatives}{Report already handled: \code{already_handled}.}
+\end{ucspec}
+
+% =====================================================================
+\section{Audit, evidence and data rights}
+
+\begin{ucspec}{D1}{View the audit trail}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{The dashboard shows the 12 latest events; \ui{Audit trail} pages through everything. Each entry shows the time, the caller's handle, the event, the token label, the region and the outcome.}
+\end{ucspec}
+
+\begin{ucspec}{D2}{Export an evidence pack}
+\ucf{Actors}{Owner.}
+\ucf{Main flow}{\ui{Download evidence (PDF)} or \ui{Signed evidence (JSON)}, optionally limited with \code{from} and \code{to} dates. The JSON contains:
+\begin{itemize}
+  \item each event's chain fields (\code{prev_hash}, \code{payload_hash}, \code{hash});
+  \item the daily anchors;
+  \item the public key;
+  \item an Ed25519 signature over the canonical JSON.
+\end{itemize}
+The PDF lists the same events and the signature's fingerprint.}
+\ucf{Rules}{No phone numbers are included.}
+\end{ucspec}
+
+\begin{ucspec}{D3}{Verify an evidence pack}
+\ucf{Actors}{Third-party verifier.}
+\ucf{Main flow}{Post the JSON to \fpath{/api/evidence/verify}. The response is \texttt{\{valid, signedByThisServer\}}. Any edit, including removing a single event, makes \code{valid} false. The public key is published at \fpath{/api/evidence/public-key} for offline checks.}
+\end{ucspec}
+
+\begin{ucspec}{D4}{Export my data}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{\ui{Download my data} returns a JSON file containing:
+\begin{itemize}
+  \item the profile and the user's own numbers (decrypted);
+  \item tokens (settings only, because codes are not stored);
+  \item requests made and received, with notes;
+  \item conversations with messages;
+  \item in-app call metadata, notifications, sessions and activity.
+\end{itemize}
+A step-up within 15 minutes is needed if a second factor is enrolled.}
+\end{ucspec}
+
+\begin{ucspec}{D5}{Erase my account}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{\begin{flow}
+\item The user types \code{DELETE MY ACCOUNT} and confirms; a step-up is needed if a second factor is enrolled.
+\item The system records the erasure, then deletes the user's rows, which cascade to their keys, numbers, tokens, requests, chats and sessions.
+\item Audit payloads that mention the user are nulled; the chain still verifies.
+\item Reports keep their moderation value but lose the link to the person.
+\end{flow}}
+\ucf{Result}{The data is gone from the live system immediately, and from backups within 35 days. Because the data key is deleted, old backup ciphertext is unreadable.}
+\end{ucspec}
+
+\begin{ucspec}{D6}{Set privacy preferences}
+\ucf{Actors}{Registered user.}
+\ucf{Main flow}{Choose how long the audit trail is kept (1, 3, 6, 12, 18 or 24 months; default 12), and whether chats send read receipts.}
+\end{ucspec}
+
+\begin{ucspec}{D7}{Read notifications}
+\ucf{Actors}{Registered user; Messaging provider.}
+\ucf{Main flow}{The handle in the menu shows an unread count. \ui{Settings} lists notifications and marks them read. Notifications also go by email when the address is verified.}
+\end{ucspec}
+
+% =====================================================================
+\section{Administration and operations}
+
+\begin{ucspec}{O1}{Request a break-glass action}
+\ucf{Actors}{Administrator.}
+\ucf{Main flow}{On \fpath{/admin}, choose an action (suspend or unsuspend a user, grant or revoke the moderator or admin role, or re-wrap data keys), give a reason of at least 10 characters, and confirm with a step-up (15 minutes).}
+\ucf{Result}{A pending request that expires after 24 hours.}
+\end{ucspec}
+
+\begin{ucspec}{O2}{Approve or reject an action}
+\ucf{Actors}{A \emph{different} administrator.}
+\ucf{Main flow}{Approve, after a step-up. The action runs and its result is shown; the request, approval and execution are all audited.}
+\ucf{Alternatives}{The same administrator who requested it: \code{dual_control}. Expired or already decided: refused.}
+\end{ucspec}
+
+\begin{ucspec}{O3}{Bootstrap an administrator}
+\ucf{Actors}{Operator.}
+\ucf{Main flow}{\code{npm run admin:create -- --handle=<handle> --role=admin|moderator} on the server grants a role to an existing account and writes an audit event. Use this only for the first two administrators.}
+\end{ucspec}
+
+\begin{ucspec}{O4}{Run migrations and seed}
+\ucf{Actors}{Operator.}
+\ucf{Main flow}{\code{npm run db:migrate} applies any new SQL migrations, retrying while the database starts. \code{npm run seed} creates demo data in development only.}
+\end{ucspec}
+
+\begin{ucspec}{O5}{Verify the audit chain}
+\ucf{Actors}{Operator (daily, from cron).}
+\ucf{Main flow}{\code{npm run audit:verify} recomputes every link and checks every anchor file. It exits non-zero and names the first broken row if anything was altered.}
+\end{ucspec}
+
+\begin{ucspec}{O6}{Run housekeeping}
+\ucf{Actors}{Scheduler (every 10 minutes).}
+\ucf{Main flow}{One pass:
+\begin{itemize}
+  \item expires consent requests and tokens;
+  \item deletes disappearing messages;
+  \item purges old one-time codes, links, grants, sessions, intro notes and outbox entries;
+  \item expires stale admin requests;
+  \item applies each owner's audit-retention period;
+  \item anchors the previous day's audit head.
+\end{itemize}
+Retention periods are in Table~\ref{tab:retention}.}
+\end{ucspec}
+
+\begin{ucspec}{O7}{Rotate the key-encryption key}
+\ucf{Actors}{Operator and Administrators.}
+\ucf{Main flow}{\begin{flow}
+\item The operator moves the current \code{MASTER_KEK} into \code{KEK_PREVIOUS} under its version number, sets a new key, increases \code{MASTER_KEK_VERSION} and restarts.
+\item An administrator requests \emph{re-wrap data keys} (O1) and a second approves it (O2). Every user's data key is re-wrapped under the new KEK; the data itself is not re-encrypted.
+\item The operator removes the old key from \code{KEK_PREVIOUS}.
+\end{flow}}
+\end{ucspec}

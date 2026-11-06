@@ -1,0 +1,41 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { api } from "./api";
+import { Icon, type IconName } from "./Icon";
+import { t } from "@/i18n";
+
+export function NavLinks({ handle, moderator, admin }: { handle: string; moderator: boolean; admin: boolean }) {
+  const path = usePathname();
+  const [unread, setUnread] = useState(0);
+  const [chats, setChats] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api("/api/notifications").then((r) => { if (alive) { setUnread(r.unread); setChats(r.chatsUnread ?? 0); } }).catch(() => undefined);
+    load();
+    const id = setInterval(load, 15000);
+    return () => { alive = false; clearInterval(id); };
+  }, [path]);
+  const link = (href: string, label: string, extra?: React.ReactNode, icon?: IconName) => (
+    <Link href={href} aria-current={path === href || (href !== "/dashboard" && path.startsWith(href)) ? "page" : undefined}>{icon ? <Icon name={icon} size={17} /> : null}{label}{extra}</Link>
+  );
+  async function signOut() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/";
+  }
+  return (
+    <nav className="nav" aria-label="Main">
+      {link("/dashboard", t("nav.dashboard"), null, "mark")}
+      {link("/dashboard/requests", t("nav.requests"), null, "inbox")}
+      {link("/groups", t("nav.groups"), null, "people")}
+      {link("/chats", t("nav.chats"), chats ? <span className="badge" aria-label={`${chats} new`}>{chats}</span> : null, "chat")}
+      {link("/dashboard/audit", t("nav.audit"), null, "log")}
+      {moderator && link("/moderation", t("nav.moderation"), null, "flag")}
+      {admin && link("/admin", t("nav.admin"), null, "sliders")}
+      <span style={{ flex: 1 }} />
+      {link("/settings", `@${handle}`, unread ? <span className="badge" aria-label={`${unread} unread notifications`}>{unread}</span> : null, "settings")}
+      <button className="iconbtn plain" onClick={signOut} aria-label={t("nav.signout")} title={t("nav.signout")}><Icon name="logout" size={19} /></button>
+    </nav>
+  );
+}

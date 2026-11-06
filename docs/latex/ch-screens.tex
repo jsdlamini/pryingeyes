@@ -1,0 +1,91 @@
+\chapter{The system's screens}
+\label{ch:screens}
+
+These are real screenshots of PryingEyes, taken by the script \fpath{tests/screens/capture.spec.ts}. It walks through the system as real people would: an owner creates codes and a group, a caller signs up from a code, they chat, a code is shared in the chat, a call rings, someone asks to join a group and an admin lets them in. Re-take them at any time with:
+
+\begin{lstlisting}
+cd mobile && npx expo export --platform web --output-dir dist-web && cd ..
+npx playwright test -c playwright.screens.config.ts
+\end{lstlisting}
+
+Website screens are 1280\,$\times$\,800 (desktop). Phone app screens are 412\,$\times$\,915, a typical Android phone; they come from the app's web build, which renders the same React Native screens as the installed app. Handles such as \code{@quiet\_heron\_45} are generated, as they would be for real people.
+
+\section{Look and feel}
+
+Since version 0.9 the website and the phone app share one visual style, taken from the \emph{Talk Sense} social app concept on Dribbble. The same values are defined twice, in \fpath{src/app/globals.css} for the website and \fpath{mobile/src/ui/theme.ts} for the app, so the two stay in step.
+
+\begin{longtable}{@{}p{0.27\linewidth}p{0.68\linewidth}@{}}
+\toprule
+\textbf{Element} & \textbf{Treatment} \\
+\midrule
+Background & A soft blush-to-lilac ``sky'' gradient (\code{\#F6E8EF} to \code{\#E8D8EC}); a deep plum version in dark mode. \\
+Cards & Frosted, translucent white with a 22-pixel radius and a faint pink shadow. \\
+Type & Merriweather (serif) for page titles, names, codes and the call timer; Inter (sans-serif) for everything you read and type. Both are bundled with the app and the site, so no font is fetched from another server. \\
+Buttons & Ink-black pills (\code{\#1C1A1F}) with white text for the main action; white pills with a thin border for the others. \\
+Accent & Magenta (\code{\#B5166A} for text, \code{\#E0218A} for badges and highlights), chosen to pass WCAG AA contrast on white. \\
+Chips and choices & White pills; the selected one turns ink-black. \\
+Chat & Rounded bubbles: yours ink-black, theirs white, with the time tucked inside. The composer is a round code button and a pill-shaped ``Type a message here\ldots'' field. \\
+Status avatars & Rounded squares rather than circles, ringed in magenta when there is something new. \\
+Calls & A plum-to-ink panel with a pale pink serif timer and round controls. \\
+Icons & One set of line icons (24-pixel grid, 1.75 stroke) on both the website and the app. \emph{Send} and \emph{Post} are a see-through magenta paper plane; \emph{report} is a flag, \emph{block} a struck circle, \emph{delete} a bin, \emph{sign out} an exit arrow; calls use round green and red buttons. Icon-only buttons keep a spoken name (for example ``Send''), so screen readers and the tests still find them; actions whose meaning needs words, such as \emph{Let in} or \emph{Leave group}, keep their label beside the icon. \\
+\bottomrule
+\end{longtable}
+
+% ---------------------------------------------------------------------
+\section{Website}
+
+\newcommand{\webshot}[2]{%
+  \begin{figure}[htbp]\centering
+  \includegraphics[width=\linewidth,frame]{screens/#1}
+  \caption{#2}\label{fig:#1}
+  \end{figure}}
+
+\webshot{web-01-home}{Home page: share a code, not your phone number}
+\webshot{web-02-signup}{Sign-up: email and password, with a generated handle (nobody sees the email)}
+\webshot{web-03-new-code}{New code: a name, where it will be shared, how careful to be, and how long it works}
+\webshot{web-04-share-code}{A new code, ready to share as a link, a short code or a QR code}
+\webshot{web-05-gate-signed-out}{A caller opens a code while signed out: create an account or sign in, then come straight back to it}
+\webshot{web-06-gate-choose}{The gate after the human check: message or call the owner in the app}
+\webshot{web-07-chat}{Private chat. The owner has shared a one-person code, shown as \ui{Open contact code}; tapping it opens that code's gate}
+\webshot{web-08-call}{An in-app call ringing: over the internet, through the TURN relay, with no phone numbers}
+\webshot{web-09-requests}{Tier 3: the owner sees who is asking, how they were checked, and their note, then decides}
+\webshot{web-10-group}{A group as its admin sees it: a post with a contact code, a phone number refused by the guard, and someone asking to join}
+\webshot{web-11-groups}{Groups: 24-hour statuses, finding a group to ask to join, and your groups}
+\webshot{web-12-settings}{Settings: account, the optional \ui{Show my number}, two-step sign-in and signed-in devices}
+
+% ---------------------------------------------------------------------
+\section{Phone app}
+
+\newcommand{\appshot}[2]{%
+  \begin{minipage}[t]{0.31\linewidth}\centering
+  \includegraphics[width=\linewidth,frame]{screens/#1}\\[3pt]
+  {\small #2}
+  \end{minipage}}
+
+\begin{figure}[htbp]\centering
+\appshot{app-01-start}{Start: create an account, sign in, or enter a code}\hfill
+\appshot{app-02-gate-signed-out}{A code opened while signed out}\hfill
+\appshot{app-03-signup}{Email sign-up, carrying the code along}
+\caption{Phone app: getting in}\label{fig:app-in}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\appshot{app-04-gate-choose}{Back on the code: message or call}\hfill
+\appshot{app-05-chat}{Chat with a shared code}\hfill
+\appshot{app-08-home}{Home: your codes}
+\caption{Phone app: reaching someone, and your own codes}\label{fig:app-reach}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\appshot{app-06-new-code}{New code}\hfill
+\appshot{app-07-share-code}{Ready to share}\hfill
+\appshot{app-10-groups}{Groups and statuses}
+\caption{Phone app: making and sharing a code}\label{fig:app-codes}
+\end{figure}
+
+\begin{figure}[htbp]\centering
+\appshot{app-09-group}{A group feed with a contact code}\hfill
+\appshot{app-11-group-requests}{Group info: someone asking to join}\hfill
+\begin{minipage}[t]{0.31\linewidth}~\end{minipage}
+\caption{Phone app: groups}\label{fig:app-groups}
+\end{figure}

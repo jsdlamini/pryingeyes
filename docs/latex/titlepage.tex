@@ -1,0 +1,33 @@
+\begin{titlepage}
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture,overlay]
+  \fill[ink] (current page.north west) rectangle ([yshift=-14.2cm]current page.north east);
+  \fill[accent2] ([yshift=-14.2cm]current page.north west) rectangle ([yshift=-14.35cm]current page.north east);
+  \node[anchor=north west,text=accent2,font=\sffamily\small\bfseries] at ([xshift=2.3cm,yshift=-7.0cm]current page.north west)
+    {S\,Y\,S\,T\,E\,M\quad D\,O\,C\,U\,M\,E\,N\,T\,A\,T\,I\,O\,N};
+  \node[anchor=north west,text=white,font=\sffamily\bfseries\fontsize{46}{50}\selectfont] at ([xshift=2.2cm,yshift=-7.8cm]current page.north west)
+    {PryingEyes};
+  \node[anchor=north west,text=white!80!ink,font=\sffamily\Large,text width=15cm] at ([xshift=2.3cm,yshift=-10.0cm]current page.north west)
+    {Privacy-first contact sharing — setup guide, use-case model and technical reference for the Phase\,1 website};
+\end{tikzpicture}
+
+\vspace*{13.6cm}
+{\sffamily\color{muted}
+\begin{tabular}{@{}L{4.2cm}L{10.5cm}@{}}
+\textbf{\color{ink}Document} & System documentation and use-case model \\
+\textbf{\color{ink}System version} & Phase 1 MVP website and phone app (\code{pryingeyes 0.10.1}; documentation v1.14) \\
+\textbf{\color{ink}Based on} & Development Agent Prompt v1.1; Product Requirements and Security Specification v1.0 \\
+\textbf{\color{ink}Owner} & Johnson Sikhumbuzo Dlamini \\
+\textbf{\color{ink}Date} & 4 November 2026 \\
+\textbf{\color{ink}Classification} & Internal / Confidential \\
+\end{tabular}}
+
+\vfill
+{\sffamily\small\color{muted}
+\begin{tabularx}{\linewidth}{@{}YYYY@{}}
+\textcolor{accent}{\Large\bfseries 1–4}\newline Overview, architecture, setup and configuration &
+\textcolor{accent}{\Large\bfseries 5–6}\newline Use-case diagrams and specifications &
+\textcolor{accent}{\Large\bfseries 7–8}\newline Key flows, operations and troubleshooting &
+\textcolor{accent}{\Large\bfseries 9}\newline API, pages, scripts, data and glossary \\
+\end{tabularx}}
+\end{titlepage}

@@ -1,0 +1,22 @@
+import { currentAuth } from "@/lib/server-auth";
+import { redirect } from "next/navigation";
+import { AuthTabs } from "@/components/AuthTabs";
+import { CodeEntry } from "@/components/CodeEntry";
+
+export default async function Home() {
+  const a = await currentAuth();
+  if (a && !a.session.mfaPending) redirect("/groups");
+  return (
+    <div className="landing">
+      <div className="landing-in">
+        <h1 className="landing-title">Share a code, not your phone number.</h1>
+        <AuthTabs />
+        <div className="landing-reach">
+          <h2 className="landing-sub">Reach someone</h2>
+          <p className="muted small">Enter the link or code they shared with you.</p>
+          <CodeEntry />
+        </div>
+      </div>
+    </div>
+  );
+}

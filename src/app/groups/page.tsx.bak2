@@ -1,0 +1,121 @@
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { api, errMsg, relTime } from "@/components/api";
+import { Icon } from "@/components/Icon";
+import { Composer, PostCard, type PostView } from "@/components/Social";
+
+type G = { id: string; name: string; role: string; members: number; lastPostAt: string | null; requests: number };
+type Found = { id: string; name: string; about: string; members: number; joined: boolean; requested: boolean };
+type Person = { author: { id: string; handle: string }; you: boolean; following: boolean; items: PostView[] };
+
+export default function Groups() {
+  const router = useRouter();
+  const [groups, setGroups] = useState<G[] | null>(null);
+  const [pending, setPending] = useState<{ id: string; name: string }[]>([]);
+  const [q, setQ] = useState(""); const [found, setFound] = useState<Found[] | null>(null);
+  const [listed, setListed] = useState(true);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const [name, setName] = useState(""); const [invite, setInvite] = useState("");
+  const [err, setErr] = useState("");
+  const load = useCallback(() => Promise.all([api("/api/groups"), api("/api/status")])
+    .then(([g, s]) => { setGroups(g.groups); setPending(g.pending); setPeople(s.people); }).catch((e) => setErr(errMsg(e))), []);
+  useEffect(() => { void load(); }, [load]);
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault(); setErr("");
+    try { const r = await api("/api/groups", { body: { name, listed } }); router.push(`/groups/${r.id}?created=1`); } catch (x) { setErr(errMsg(x)); }
+  }
+  async function search(e?: React.FormEvent) {
+    e?.preventDefault(); setErr("");
+    try { setFound((await api(`/api/groups/discover?q=${encodeURIComponent(q)}`)).groups); } catch (x) { setErr(errMsg(x)); }
+  }
+  async function ask(g: Found) {
+    setErr("");
+    try { await api(`/api/groups/${g.id}/join`, { body: {} }); await search(); await load(); } catch (x) { setErr(errMsg(x)); }
+  }
+  function join(e: React.FormEvent) {
+    e.preventDefault();
+    const m = invite.trim().match(/\/g\/([0-9A-Za-z-]+)/)?.[1] ?? invite.trim();
+    if (m) router.push(`/g/${encodeURIComponent(m)}`);
+  }
+  async function follow(p: Person) {
+    setErr("");
+    try { await api("/api/social/follow", { body: { handle: p.author.handle, follow: !p.following } }); await load(); } catch (x) { setErr(errMsg(x)); }
+  }
+  const me = people.find((p) => p.you);
+  const shown = people.find((p) => p.author.id === open);
+
+  return (
+    <div className="page" style={{ maxWidth: 820 }}>
+      <h1>Groups</h1>
+      <p className="muted small">Members see each other by handle only. Phone numbers and email addresses can&apos;t be posted in groups or statuses; people attach a contact code that others open to reach them.</p>
+      {err && <div className="alert err">{err}</div>}
+
+      <section className="card" aria-labelledby="status-h">
+        <div className="spread"><h2 id="status-h" style={{ margin: 0 }}>Status</h2><span className="muted tiny">Lasts 24 hours · seen by people in your groups</span></div>
+        <div className="status-strip">
+          <button className={`status-person ${me ? "ring" : ""}`} onClick={() => (me ? setOpen(open === me.author.id ? null : me.author.id) : setComposing(true))} data-testid="status-mine">
+            <span className="status-dot">{me ? "Y" : "+"}</span><span className="tiny">{me ? "You" : "Add yours"}</span></button>
+          {people.filter((p) => !p.you).map((p) => (
+            <button key={p.author.id} className="status-person ring" aria-pressed={open === p.author.id} onClick={() => setOpen(open === p.author.id ? null : p.author.id)} data-testid="status-person">
+              <span className="status-dot">{p.author.handle[0].toUpperCase()}</span><span className="tiny">@{p.author.handle}</span></button>
+          ))}
+        </div>
+        {composing || (me && open === me.author.id) ? (
+          <Composer placeholder="What's new? (no phone numbers: attach your code instead)"
+            onPost={async (b) => { await api("/api/status", { body: b }); setComposing(false); await load(); }} />
+        ) : null}
+        {shown ? <div className="stack" style={{ marginTop: 12 }}>
+  <div className="spread" style={{ marginBottom: 6 }}><b>@{shown.author.handle}</b>{!shown.you && <button className={`btn sm${shown.following ? " ghost" : ""}`} onClick={() => follow(shown)}>{shown.following ? "Following" : "Follow"}</button>}</div>
+  {shown.items.map((p) => <PostCard key={p.id} p={p} onChanged={load} />)}
+</div> : null}
+      </section>
+
+      <section className="card" aria-labelledby="find-h">
+        <h2 id="find-h" style={{ marginTop: 0 }}>Find a group</h2>
+        <form onSubmit={search} className="row">
+          <label htmlFor="gq" className="sr-only">Search groups</label>
+          <input id="gq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or topic" style={{ flex: 1 }} data-testid="group-search" />
+          <button className="iconbtn solid" aria-label="Search" title="Search"><Icon name="search" size={18} /></button>
+        </form>
+        {found && (found.length === 0 ? <p className="muted small">No groups match. Try another word, or start one below.</p> : (
+          <ul className="members" style={{ marginTop: 10 }}>{found.map((g) => (
+            <li key={g.id} data-testid="found-group"><span><b>{g.name}</b><br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}{g.about ? ` · ${g.about}` : ""}</span></span>
+              {g.joined ? <Link className="btn ghost sm" href={`/groups/${g.id}`}>Open</Link>
+                : g.requested ? <span className="muted small">Asked</span>
+                : <button className="btn sm" onClick={() => ask(g)} data-testid="ask-join"><Icon name="userPlus" size={16} />Ask to join</button>}
+            </li>))}</ul>
+        ))}
+        <p className="muted tiny" style={{ marginBottom: 0 }}>Anyone can ask to join. The group&apos;s creator or admins decide who gets in.</p>
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0 }}>Your groups</h2>
+        {!groups ? <p>Loading…</p> : groups.length === 0 ? <p className="muted small">No groups yet. Start one below and share its invite link, or open an invite link someone sent you.</p> : (
+          <ul className="feed">{groups.map((g) => (
+            <li key={g.id}><span className="t">{g.lastPostAt ? relTime(g.lastPostAt) : "new"}</span>
+              <span><Link href={`/groups/${g.id}`}><b>{g.name}</b></Link><br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}{g.role === "admin" ? " · admin" : ""}</span></span>
+              <span>{g.requests > 0 && <Link href={`/groups/${g.id}`} className="badge-count" aria-label={`${g.requests} asking to join`} data-testid="requests-badge">{g.requests}</Link>}</span></li>))}</ul>
+        )}
+        {pending.length > 0 && <p className="small muted" data-testid="pending">Waiting for an admin to let you in: {pending.map((p) => p.name).join(", ")}</p>}
+        <div className="two-forms">
+          <form onSubmit={create} className="stack">
+            <label className="small" htmlFor="gname"><b>Start a group</b></label>
+            <div className="row"><input id="gname" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="e.g. Manzini Market" data-testid="group-name" />
+              <button className="btn sm" disabled={name.trim().length < 2} data-testid="group-create"><Icon name="plus" size={16} />Create</button></div>
+            <label className="check small"><input type="checkbox" checked={listed} onChange={(e) => setListed(e.target.checked)} /> <span>Let people find it in search (you still approve everyone)</span></label>
+          </form>
+          <form onSubmit={join} className="stack">
+            <label className="small" htmlFor="ginv"><b>Join with an invite link</b></label>
+            <div className="row"><input id="ginv" value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="https://…/g/…" />
+              <button className="btn ghost sm" disabled={invite.trim().length < 12}><Icon name="login" size={16} />Join</button></div>
+          </form>
+        </div>
+      </section>
+    </div>
+  );
+}

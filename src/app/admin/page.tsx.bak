@@ -1,0 +1,47 @@
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import { api, errMsg, relTime } from "@/components/api";
+
+export default function Admin() {
+  const [as, setAs] = useState<any[] | null>(null); const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
+  const [f, setF] = useState({ action: "suspend_user", handle: "", role: "moderator", reason: "" });
+  const load = useCallback(() => api("/api/admin/actions").then((r) => setAs(r.actions)).catch((e) => setErr(errMsg(e))), []);
+  useEffect(() => { load(); }, [load]);
+  async function request(e: React.FormEvent) {
+    e.preventDefault(); setErr(""); setMsg("");
+    const req: any = { action: f.action };
+    if (f.action !== "rewrap_keys") req.handle = f.handle;
+    if (f.action.endsWith("_role")) req.role = f.role;
+    try { await api("/api/admin/actions", { body: { request: req, reason: f.reason } }); setMsg("Requested. Another administrator must approve it."); await load(); } catch (x) { setErr(errMsg(x)); }
+  }
+  async function decide(id: string, approve: boolean) {
+    try { const r = await api(`/api/admin/actions/${id}`, { body: { approve } }); setMsg(r.result ?? "Rejected."); await load(); } catch (x) { setErr(errMsg(x)); }
+  }
+  return (
+    <div className="page" style={{ maxWidth: 900 }}>
+      <h1>Break-glass administration</h1>
+      <p className="muted small">Every action needs two administrators: one requests, a different one approves. Both steps are written to the audit log. Requests expire after 24 hours.</p>
+      {err && <div className="alert err">{err}</div>}{msg && <div className="alert ok">{msg}</div>}
+      <form className="card" onSubmit={request}>
+        <h2>Request an action</h2>
+        <div className="grid2">
+          <div className="field"><label htmlFor="act">Action</label><select id="act" value={f.action} onChange={(e) => setF({ ...f, action: e.target.value })}>
+            <option value="suspend_user">Suspend user</option><option value="unsuspend_user">Unsuspend user</option>
+            <option value="grant_role">Grant role</option><option value="revoke_role">Revoke role</option><option value="rewrap_keys">Re-wrap data keys (after KEK rotation)</option></select></div>
+          {f.action !== "rewrap_keys" && <div className="field"><label htmlFor="h">Handle</label><input id="h" type="text" value={f.handle} onChange={(e) => setF({ ...f, handle: e.target.value })} /></div>}
+          {f.action.endsWith("_role") && <div className="field"><label htmlFor="r">Role</label><select id="r" value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}><option>moderator</option><option>admin</option></select></div>}
+        </div>
+        <div className="field"><label htmlFor="why">Reason</label><input id="why" type="text" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} /></div>
+        <button className="btn" disabled={f.reason.length < 10}>Request</button>
+      </form>
+      <div className="card">
+        <h2>Requests</h2>
+        {!as ? <p>Loading…</p> : <table className="tbl"><thead><tr><th>Action</th><th>By</th><th>Reason</th><th>Status</th><th /></tr></thead><tbody>
+          {as.map((a) => <tr key={a.id}><td>{a.action}<br /><span className="muted tiny">{JSON.stringify(a.params)}</span></td><td>@{a.requestedByHandle} <span className="muted tiny">{relTime(a.createdAt)}</span></td>
+            <td className="small">{a.reason}{a.result ? <><br /><span className="muted">{a.result}</span></> : null}</td><td><span className={`status ${a.status === "executed" ? "good" : a.status === "pending" ? "pending" : "bad"}`}>{a.status}</span></td>
+            <td>{a.status === "pending" && <div className="row"><button className="btn sm" onClick={() => decide(a.id, true)}>Approve</button><button className="btn ghost sm" onClick={() => decide(a.id, false)}>Reject</button></div>}</td></tr>)}
+        </tbody></table>}
+      </div>
+    </div>
+  );
+}

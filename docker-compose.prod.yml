@@ -1,0 +1,43 @@
+# PryingEyes in production with Docker: the website (built-in database and cache) and the
+# call relay. Uses the same .env as everything else.
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Details: docs/DEPLOY-DOCKER.md
+name: pryingeyes
+
+services:
+  app:
+    build: .
+    image: pryingeyes-app:latest
+    env_file: .env
+    environment:
+      # Fixed for the container; everything else comes from .env.
+      DATA_DIR: /app/var/data
+      AUDIT_ANCHOR_DIR: /app/var/anchors
+      BACKGROUND_JOBS: "on"
+    # Only this machine can reach it; your reverse proxy forwards to it.
+    ports: ["127.0.0.1:${PE_PORT:-3100}:3000"]
+    volumes: ["pe-data:/app/var"]
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+  # TURN relay for in-app calls. Host networking so its UDP relay ports work without NAT tricks.
+  coturn:
+    image: coturn/coturn:4.18
+    network_mode: host
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        exec turnserver -c /etc/coturn/turnserver.conf
+        --static-auth-secret="$$TURN_SECRET" --realm="$$TURN_HOST" --server-name="$$TURN_HOST"
+        $${TURN_EXTERNAL_IP:+--external-ip=$$TURN_EXTERNAL_IP}
+    environment:
+      TURN_SECRET: ${TURN_SECRET:?TURN_SECRET missing from .env}
+      TURN_HOST: ${TURN_HOST:?set TURN_HOST in .env (DNS-only relay hostname)}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+    volumes: ["./docker/turnserver.docker.conf:/etc/coturn/turnserver.conf:ro"]
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+
+volumes:
+  pe-data:

@@ -1,0 +1,54 @@
+import Link from "next/link";
+import { CodeEntry } from "@/components/CodeEntry";
+import { Icon } from "@/components/Icon";
+import { currentAuth } from "@/lib/server-auth";
+import { redirect } from "next/navigation";
+
+export default async function Home() {
+  const a = await currentAuth();
+  if (a && !a.session.mfaPending) redirect("/groups");
+  return (
+    <div className="page">
+      <section className="hero2">
+        <div>
+          <h1>Share a code, not your phone number.</h1>
+          <p className="lede">
+            Put a PryingEyes code on your listing, sign or business card. People who want to reach you pass a short check,
+            then call or message you in the app. Your number stays private, and so does theirs.
+          </p>
+          <div className="row" style={{ marginTop: 20 }}>
+            {a ? <Link className="btn" href="/dashboard">Open your dashboard</Link>
+              : <><Link className="btn" href="/signup">Protect my number</Link><Link className="btn ghost" href="/login">Sign in</Link></>}
+          </div>
+        </div>
+        <div className="stack">
+          <div className="plate" aria-label="Example: a PryingEyes code shown instead of a phone number">
+            <span className="code">RW4T-P8NM</span>
+            <span className="instead">instead of <s>+268 7612 3456</s></span>
+          </div>
+          <section className="card" aria-labelledby="have-code">
+            <h2 id="have-code">Reach someone</h2>
+            <p className="muted small">Enter the link or code they shared with you.</p>
+            <CodeEntry />
+          </section>
+        </div>
+      </section>
+
+      <section className="points" aria-label="Why it's safe">
+        <div><h3><Icon name="lock" />Nothing to scrape</h3><p>Codes are random. They contain nothing about your number and can't be decoded offline.</p></div>
+        <div><h3><Icon name="log" />Every contact is logged</h3><p>See who asked, how they were checked and what they got. Export the record as signed evidence if you need it.</p></div>
+        <div><h3><Icon name="sliders" />You decide</h3><p>Approve each request, pause or replace a code, or switch every code off at once.</p></div>
+      </section>
+
+      <section style={{ marginTop: 36 }} aria-labelledby="how">
+        <h2 id="how">How a contact works</h2>
+        <div className="how">
+          <div className="step"><span className="n">1</span><b>You share a code</b><span className="small muted">On a listing, a sign or a card. You choose what it allows: calls, messages or seeing your number.</span></div>
+          <div className="step"><span className="n">2</span><b>They pass a short check</b><span className="small muted">They sign in and prove they&apos;re a person. Stricter codes add an emailed code or your approval.</span></div>
+          <div className="step"><span className="n">3</span><b>They call or message you</b><span className="small muted">Calls run over the internet inside PryingEyes, and messages are encrypted. Neither of you sees the other&apos;s number.</span></div>
+          <div className="step"><span className="n">4</span><b>You carry on in Chats</b><span className="small muted">Replies and missed calls appear under Chats, and we email you when something new arrives. Block or report anyone at any time.</span></div>
+        </div>
+      </section>
+    </div>
+  );
+}

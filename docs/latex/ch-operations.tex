@@ -1,0 +1,157 @@
+\chapter{Operations, testing and troubleshooting}
+\label{ch:ops}
+
+\section{Automated tests and acceptance checks}
+
+\begin{table}[H]
+\centering\small
+\caption{Test suites and acceptance checks}\label{tab:tests}
+\begin{tabularx}{\linewidth}{@{}L{3.7cm}L{4.2cm}Y@{}}
+\toprule
+\thead{Check} & \thead{Command} & \thead{Pass condition and last result} \\
+\midrule
+Unit + integration & \code{npm test} & All green. \textbf{106/106} (23 unit; 83 against real PostgreSQL and Redis). \\
+Browser journeys & \code{npm run test:e2e} & \textbf{8/8}: passkey onboarding; handle box; Tier 1 reveal; Tier 3 consent, chat and panic; chat; passkey sign-in; accessibility; mobile layout. \\
+Enumeration campaign & \code{npm run attack:enumerate} & Over 99.9\% of 10,000 random guesses blocked and none succeed. \textbf{99.95\%, 0 found.} \\
+Plaintext numbers & \code{npm run scan:plaintext} & No stored number, in any format, in any table, log or extra file. \textbf{0 findings.} \\
+Audit chain & \code{npm run audit:verify} & Every link and anchor verifies. \textbf{Pass.} \\
+Load & \code{npm run load:test} & Gate p95 under 300 ms at 50 requests per second. \textbf{p95 222 ms.} \\
+Dependencies & \code{npm audit --omit=dev} & No known vulnerabilities in production dependencies. \textbf{0.} \\
+Everything above & \code{npm run verify:all} & Prints a pass/fail summary (about 5 minutes). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection*{How to run them}
+
+\begin{lstlisting}
+npm test                          # uses the separate pryingeyes_test database
+npx playwright install chromium   # once
+npm run build && npm start        # terminal 1
+npm run test:e2e                  # terminal 2
+npm run verify:all                # or everything, in order
+\end{lstlisting}
+
+The test database \code{pryingeyes_test} is created by the Docker setup and wiped at the start of every test run. Never point \code{TEST_DATABASE_URL} at real data.
+
+The load test needs the gate budgets raised, or the budgets themselves would throttle it. Start the server like this first:
+\begin{lstlisting}
+RL_IP_PER_HOUR=10000000 RL_CALLER_PER_DAY=10000000 \
+RL_CALLER_TOKEN_PER_DAY=10000000 RL_TOKEN_PER_DAY=10000000 npm start
+\end{lstlisting}
+
+\section{Running in production}
+
+\code{docs/DEPLOY.md} is the full guide. In summary:
+\begin{enumerate}
+  \item Set \code{APP_ENV=production} and an HTTPS \code{APP_URL}, configure real providers (Turnstile and Resend), and use managed PostgreSQL 16 and Redis 7.
+  \item Terminate TLS 1.3 at nginx. Set \code{TRUST_PROXY_HOPS} to match the proxy chain. Keep \fpath{/t/...} and \fpath{/g/...} out of access logs; an nginx map is provided.
+  \item Run two processes: \code{npm start} and \code{npm run jobs}. Alternatively use \code{docker compose --profile app}.
+  \item Put \code{AUDIT_ANCHOR_DIR} on write-once storage (S3 Object Lock or \code{chattr +a}) and run \code{npm run audit:verify} daily.
+  \item Replace the local key provider with a cloud KMS before launch.
+  \item Complete \fpath{docs/LAUNCH_CHECKLIST.md}. The blockers are legal review (including registration with ESCCOM under the Eswatini Data Protection Act 2022) and an independent OWASP ASVS Level 2 penetration test.
+\end{enumerate}
+
+\section{Email with Resend}
+\label{sec:resend-prod}
+
+\begin{enumerate}
+  \item In Resend, add and verify your sending domain. Add the SPF and DKIM records it shows to your DNS, plus a DMARC record.
+  \item Create an API key with \emph{sending access} only, restricted to that domain if possible.
+  \item Set \code{EMAIL_PROVIDER=resend} and \code{RESEND_API_KEY}, and set \code{EMAIL_FROM} to an address on your domain, for example \code{PryingEyes <no-reply@yourdomain.com>}. \code{EMAIL_REPLY_TO} is optional. In staging and production the app refuses to start with the \code{@resend.dev} test sender.
+  \item Run \code{npm run email:test -- --to=you@yourdomain.com} and check the Resend dashboard. The test inboxes \code{delivered@resend.dev} and \code{bounced@resend.dev} simulate outcomes.
+\end{enumerate}
+
+How the app uses Resend:
+\begin{itemize}
+  \item Each email is sent once, with a fresh idempotency key that is reused if it has to retry, so a retry can't duplicate it.
+  \item Only 429 and 5xx responses are retried, up to 3 attempts with back-off (\code{Retry-After} is honoured). Errors such as an invalid key or unverified sender fail at once.
+  \item Every email has a plain-text body and a matching minimal HTML copy, and is tagged by category (\code{verification}, \code{one_time_code}, \code{consent_request}, \code{token_frozen}, \code{security}, ...) for filtering in Resend.
+  \item Logs record the Resend email id, category and any error name. Addresses and content are never logged.
+  \item If the confirmation email fails, sign-up answers \code{email_unavailable}; signing up again replaces the unconfirmed attempt and sends a fresh link. A failed one-time code answers \code{delivery_failed}.
+\end{itemize}
+
+\section{Data retention schedule}
+
+\begin{table}[H]
+\centering\small
+\caption{Retention, applied by the housekeeping worker}\label{tab:retention}
+\begin{tabularx}{\linewidth}{@{}L{5.2cm}Y@{}}
+\toprule
+\thead{Data} & \thead{Kept for} \\
+\midrule
+Audit event payloads & Owner's choice: 1--24 months, default 12. Events with no owner: 12 months. Hashes are kept forever so the chain still verifies. \\
+Tier 3 chat messages & 24 hours \\
+Other chat messages & Until either party erases their account \\
+One-time codes, human-check results & 90 days \\
+Email verification links & 90 days after expiry \\
+Reveal grants & 1 day after expiry (each is usable for 60 seconds) \\
+Sessions & 1 day after expiry; 30 days after sign-out \\
+Tier 3 intro notes & 30 days after the request closes \\
+Development outbox & 7 days \\
+Pending admin requests & Expire after 24 hours \\
+Erased accounts & Immediately from live data; from backups within 35 days, and unreadable at once because the data key is deleted \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Backups and recovery}
+
+\begin{itemize}
+  \item Back up PostgreSQL nightly, encrypted, keeping copies for no more than 35 days so erasure reaches backups.
+  \item WAL archiving gives a 5-minute recovery point; the target recovery time is 4 hours. Test a restore every quarter.
+  \item Back up \fpath{.env}, or your secrets manager, separately and securely. Without the same keys, a restored database can't decrypt numbers.
+  \item Redis holds only counters and short-lived challenges and needs no backup.
+\end{itemize}
+
+\section{Monitoring}
+
+Alert on:
+\begin{itemize}
+  \item 5xx error rate;
+  \item p95 latency of \fpath{/api/gate/start} above 300 ms;
+  \item any failure of \code{npm run audit:verify};
+  \item failures of the housekeeping worker;
+  \item Resend bounces and complaints;
+  \item moderation reports older than 60 minutes without a response.
+\end{itemize}
+Logs are JSON lines (pino) with ISO timestamps. Phone numbers, token paths and secrets are redacted before writing.
+
+\section{Troubleshooting}
+
+\begin{longtable}{@{}L{4.6cm}L{4.4cm}p{6.3cm}@{}}
+\caption{Common problems}\label{tab:trouble}\\
+\toprule
+\thead{Symptom} & \thead{Cause} & \thead{Fix} \\
+\midrule\endfirsthead
+\toprule
+\thead{Symptom} & \thead{Cause} & \thead{Fix} \\
+\midrule\endhead
+\code{db:migrate} fails with ``Connection terminated unexpectedly'' & PostgreSQL was still initialising on its first start. & Run it again; the current script retries for 30 seconds. Use \code{docker compose up -d --wait}. \\
+\code{docker compose up} fails: port 5433 or 6380 in use & Another service is on that port. & Change the left-hand port in \fpath{docker-compose.yml} and the matching URL in \fpath{.env}. \\
+\code{EADDRINUSE :3000} & Another dev server is running. & Stop it, or run \code{npx next dev -p 3001} and set \code{APP_URL} to match. \\
+``Too many attempts'' while testing & Rate limits and lockouts work as designed. & Clear the counters (below), or wait. \\
+Passkey button does nothing, or ``couldn't verify that passkey'' & WebAuthn needs \code{localhost} or HTTPS, and \code{RP_ID} must match the host. & Use \url{http://localhost:3000}, not an IP address. On a LAN, use an authenticator app instead. \\
+No email arrives & The development provider captures emails. & Open \fpath{/dev/outbox}. For real emails, see §\ref{sec:resend-prod}. \\
+With Resend, emails reach only you & The test sender \code{onboarding@resend.dev} only delivers to the Resend account owner. & Verify your domain in Resend and set \code{EMAIL_FROM} to an address on it. \\
+Sign-up says ``We couldn't send the confirmation email'' & Resend refused or couldn't be reached (bad key, unverified sender, outage, or a rate limit). & Run \code{npm run email:test}. The log shows Resend's error name, never the address. Signing up again sends a fresh link. \\
+``Invalid configuration: RESEND\_API\_KEY'' & \code{EMAIL_PROVIDER=resend} without a key. & Add the key, or use \code{EMAIL_PROVIDER=outbox} locally. \\
+Lost a token's link & Only a fingerprint is stored. & Use \ui{Rotate} to get a new link; the old one stops working. \\
+App refuses to start: ``Unsafe production configuration'' & \code{APP_ENV} is staging or production while a development stand-in or http URL is configured. & Configure real providers and HTTPS, or set \code{APP_ENV=development} for local use. \\
+``Invalid configuration: MASTER\_KEK ...'' & Keys missing or malformed. & Run \code{npm run keys:generate}. \\
+Stored numbers can't be decrypted after an update & \fpath{.env} keys changed. & Restore the original \fpath{.env}. Keys must never change on a system with data. \\
+Sign-up says ``Handle: use 3--24 letters\ldots'' & The handle contains something not allowed, e.g. an email the browser autofilled, a hyphen, or more than 24 characters. & Tap \ui{Suggest another}, or use the corrected handle the form offers. \\
+\code{npm ci}: ``18 moderate vulnerabilities'' & Advisories in development-only tools (\code{drizzle-kit}'s bundled esbuild). & Production dependencies audit clean. Don't run \code{npm audit fix --force}: it upgrades Next.js across a major version. \\
+\code{npm} warns about install scripts & npm's install-script safety feature. & Harmless. To silence it: \code{npm install-scripts approve esbuild}. \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Clearing rate-limit counters (development only)}
+
+\begin{lstlisting}
+docker compose exec redis sh -c \
+  "redis-cli --scan --pattern 'rl:*'    | xargs -r redis-cli del; \
+   redis-cli --scan --pattern 'lock:*'  | xargs -r redis-cli del"
+\end{lstlisting}
+
+The browser tests clear these automatically before each run, but only when \code{APP_ENV=development}.

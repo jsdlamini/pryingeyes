@@ -1,0 +1,69 @@
+# Local services for PryingEyes. Ports are shifted (5433, 6380) so they don't clash with a
+# PostgreSQL or Redis already installed on your machine.
+#   docker compose up -d            → postgres, redis, coturn (TURN relay for in-app calls)
+#   docker compose --profile app up -d --build   → also runs the app + retention worker in containers
+name: pryingeyes
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pryingeyes
+      POSTGRES_PASSWORD: pryingeyes
+      POSTGRES_DB: pryingeyes
+    ports: ["127.0.0.1:${PE_DB_PORT:-5433}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pryingeyes"]
+      interval: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["127.0.0.1:${PE_REDIS_PORT:-6380}:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+  # TURN relay for in-app calls. Uses the host network (Linux) so the UDP relay ports work
+  # without NAT tricks. TURN_SECRET is read from .env (run `npm run keys:generate` first).
+  coturn:
+    image: coturn/coturn:4.18
+    network_mode: host
+    command: ["-c", "/etc/coturn/turnserver.conf", "--static-auth-secret=${TURN_SECRET:?run npm run keys:generate first}"]
+    # Production: in .env set TURN_CONFIG=./docker/turnserver.prod.conf (TLS, private ranges blocked)
+    # and TURN_CERTS=/etc/letsencrypt (the server's Let's Encrypt folder).
+    volumes: ["${TURN_CONFIG:-./docker/turnserver.conf}:/etc/coturn/turnserver.conf:ro", "${TURN_CERTS:-./docker/no-certs}:/etc/letsencrypt:ro"]
+    restart: unless-stopped
+  app:
+    profiles: ["app"]
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://pryingeyes:pryingeyes@postgres:5432/pryingeyes
+      REDIS_URL: redis://redis:6379/0
+      BACKGROUND_JOBS: "off"   # the jobs service below runs them
+    ports: ["127.0.0.1:${PE_PORT:-3000}:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes: [anchors:/app/var/anchors]
+  jobs:
+    profiles: ["app"]
+    build: .
+    command: ["npx", "tsx", "scripts/jobs.ts"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://pryingeyes:pryingeyes@postgres:5432/pryingeyes
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    volumes: [anchors:/app/var/anchors]
+
+volumes:
+  pgdata:
+  redisdata:
+  anchors:

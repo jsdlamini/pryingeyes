@@ -1,0 +1,39 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { api, errMsg } from "@/components/api";
+import { passkeysSupported, authenticateWithPasskey } from "@/components/passkey";
+import { Icon } from "@/components/Icon";
+
+const nextUrl = () => { const n = new URLSearchParams(window.location.search).get("next"); return n?.startsWith("/") && !n.startsWith("//") ? n : "/groups"; };
+function after(status: string) {
+  window.location.href = status === "mfa_required" ? `/login/mfa?next=${encodeURIComponent(nextUrl())}` : nextUrl();
+}
+
+export default function Login() {
+  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr("");
+    try { after((await api("/api/auth/login", { body: { email, password } })).status); } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
+  }
+  async function passkey() {
+    setErr(""); setBusy(true);
+    try { after((await authenticateWithPasskey()).status); } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
+  }
+  return (
+    <div className="narrow">
+      <h1>Sign in</h1>
+      <div className="card stack">
+        {err && <div className="alert err" role="alert">{err}</div>}
+        {passkeysSupported() && <button className="btn block social" onClick={passkey} disabled={busy}><Icon name="key" size={18} />Sign in with a passkey</button>}
+        <form onSubmit={submit}>
+            <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <button className="btn block social" disabled={busy}><Icon name="mail" size={18} />Sign in</button>
+          </form>
+      </div>
+      <p className="small muted" style={{ marginTop: 12 }}>New here? <Link href="/signup" onClick={(e) => { e.preventDefault(); window.location.href = `/signup?next=${encodeURIComponent(nextUrl())}`; }}>Create an account</Link></p>
+    </div>
+  );
+}

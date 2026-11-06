@@ -1,0 +1,69 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: pryingeyes, POSTGRES_PASSWORD: pryingeyes, POSTGRES_DB: pryingeyes_test }
+        ports: ["5433:5432"]
+        options: --health-cmd "pg_isready -U pryingeyes" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6380:6379"]
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Secret scanning
+        uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Dependency scanning (fail on high/critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: SAST (Semgrep, OWASP Top 10 + TypeScript rules)
+        run: pipx run semgrep --config p/owasp-top-ten --config p/typescript --config p/secrets --error --exclude tests
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Unit + integration tests (incl. token entropy, gate tiers, audit chain, erasure)
+        run: npm test
+      - name: No phone numbers in test logs
+        run: npx tsx scripts/scan-plaintext.ts --logs=./var/test-logs
+        env:
+          DATABASE_URL: postgresql://pryingeyes:pryingeyes@127.0.0.1:5433/pryingeyes_test
+          MASTER_KEK: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+          TOKEN_PEPPER: AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=
+          BLIND_INDEX_KEY: AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=
+          SECRETS_HMAC_KEY: BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ=
+          EVIDENCE_SIGNING_KEY: MC4CAQAwBQYDK2VwBCIEIBERERERERERERERERERERERERERERERERERERERERER
+          REDIS_URL: redis://127.0.0.1:6380/15
+      - run: npm run build
+
+  e2e:
+    needs: checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: pryingeyes, POSTGRES_PASSWORD: pryingeyes, POSTGRES_DB: pryingeyes }
+        ports: ["5433:5432"]
+        options: --health-cmd "pg_isready -U pryingeyes" --health-interval 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6380:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: cp .env.example .env && npm run keys:generate && npm run db:migrate
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: (npm start > server.log 2>&1 &) && for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/privacy && break; sleep 1; done
+      - run: npm run test:e2e
+      - run: npm run attack:enumerate -- --attempts=10000 --concurrency=50
+      - run: npm run audit:verify
+      - run: npm run scan:plaintext

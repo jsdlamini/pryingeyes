@@ -1,0 +1,267 @@
+\chapter{Key flows and lifecycles}
+\label{ch:flows}
+
+This chapter shows the runtime behaviour behind the most important use cases: the decode gate's decision flow, how people chat and call privately, a complete Tier 3 contact, and the lifecycles of tokens and gate requests.
+
+\section{Decode gate decision flow}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  % column A: checks
+  \node[terminal] (start) at (0,0.3) {Open /t/<code>};
+  \node[decision] (d1) at (0,-1.4) {Signed in?};
+  \node[decision] (d2) at (0,-3.1) {Locked out or 2 requests in flight?};
+  \node[decision] (d3) at (0,-4.9) {IP and daily caller budget left?};
+  \node[decision] (d4) at (0,-6.7) {Human check passed?};
+  \node[decision] (d5) at (0,-8.5) {Token active, caller not blocked?};
+  \node[decision] (d6) at (0,-10.3) {Per-token budgets left?};
+  \node[flowbox] (req) at (0,-12.0) {Create gate request\\\scriptsize(30 min), record region};
+
+  \node[flowbox,text width=2.6cm] (signin) at (-4.4,-1.4) {Create an account or sign in (A2)};
+  \node[badend] (lim) at (-4.4,-4.0) {limited};
+  \node[badend] (cap) at (-4.4,-6.7) {captcha\_failed};
+  \node[badend] (una) at (-4.4,-9.4) {unavailable};
+  \node[font=\sffamily\scriptsize,text=muted,align=center,text width=3cm] at (-4.4,-11.6) {each failure counts toward lockout (5) and token freeze (10)};
+
+  \draw[arrow] (start) -- (d1);
+  \draw[arrow] (d1) -- node[lbl,above]{no} (signin);
+  \draw[arrow] (signin.north) |- ([yshift=0.25cm]d1.north) ;
+  \draw[arrow] (d1) -- node[lbl,right]{yes} (d2);
+  \draw[arrow] (d2.west) -| node[lbl,above,pos=0.25]{yes} (lim.north);
+  \draw[arrow] (d2) -- node[lbl,right]{no} (d3);
+  \draw[arrow] (d3.west) -| node[lbl,above,pos=0.25]{no} (lim.south);
+  \draw[arrow] (d3) -- node[lbl,right]{yes} (d4);
+  \draw[arrow] (d4) -- node[lbl,above]{no} (cap);
+  \draw[arrow] (d4) -- node[lbl,right]{yes} (d5);
+  \draw[arrow] (d5.west) -| node[lbl,above,pos=0.25]{no} (una.north);
+  \draw[arrow] (d5) -- node[lbl,right]{yes} (d6);
+  \draw[arrow] (d6.west) -| node[lbl,above,pos=0.25]{no} (una.south);
+  \draw[arrow] (d6) -- node[lbl,right]{yes} (req);
+
+  % column B: tier steps
+  \node[decision] (t23) at (6.4,0.1) {Tier 2 or 3?};
+  \node[flowbox] (otp) at (6.4,-1.5) {Email a one-time code to the caller};
+  \node[decision] (ok) at (6.4,-3.3) {Code correct?};
+  \node[decision] (t3) at (6.4,-5.1) {Tier 3?};
+  \node[flowbox] (ask) at (6.4,-6.8) {Caller sends request + optional note; owner notified};
+  \node[decision] (own) at (6.4,-8.6) {Owner's decision (within 24 h)};
+  \node[flowbox] (choose) at (6.4,-10.9) {Caller chooses an allowed outcome};
+  \node[flowbox,text width=1.6cm] (o1) at (4.1,-12.7) {Reveal\\\scriptsize 60 s PNG};
+  \node[flowbox,text width=1.6cm] (o2) at (6.4,-12.7) {In-app call\\\scriptsize over data};
+  \node[flowbox,text width=1.6cm] (o3) at (8.7,-12.7) {Chat\\\scriptsize encrypted};
+
+  \node[badend] (wrong) at (10.6,-3.3) {otp\_wrong};
+  \node[badend] (dec) at (10.6,-8.6) {unavailable};
+  \node[font=\sffamily\scriptsize,text=muted,align=center,text width=2.6cm] at (10.6,-9.6) {declined, declined \& blocked, or expired};
+
+  \draw[arrow] (req.east) -- ++(1.15,0) |- (4.0,1.75) -| (t23.north);
+  \draw[arrow] (t23) -- node[lbl,right]{yes} (otp);
+  \draw[arrow] (otp) -- (ok);
+  \draw[arrow] (ok) -- node[lbl,above]{no} (wrong);
+  \draw[arrow] (wrong.north) |- node[lbl,pos=0.25,right]{retry} (otp.east);
+  \draw[arrow] (ok) -- node[lbl,right]{yes} (t3);
+  \draw[arrow] (t3) -- node[lbl,right]{yes} (ask);
+  \draw[arrow] (ask) -- (own);
+  \draw[arrow] (own) -- node[lbl,above]{no} (dec);
+  \draw[arrow] (own) -- node[lbl,right,align=left,pos=0.45]{approve or\\reveal once} (choose);
+  \draw[draw=ink!80,line width=0.55pt] (t23.west) -- node[lbl,above]{no (T1)} (3.9,0.1);
+  \draw[draw=ink!80,line width=0.55pt] (t3.west) -- node[lbl,above]{no} (3.9,-5.1);
+  \draw[arrow] (3.9,0.1) |- (choose.west);
+  \draw[arrow] (choose) -- (o1.north);
+  \draw[arrow] (choose) -- (o2);
+  \draw[arrow] (choose) -- (o3.north);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Decode gate decision flow}
+\label{fig:gateflow}
+\end{figure}
+
+Every negative branch that involves a specific token returns the same \code{unavailable} body, after the same 200 ms floor. An attacker therefore can't tell an unknown code from one that is paused, revoked, frozen, used up, blocked or declined. The CAPTCHA is checked before the token is looked up, so even a failed human check reveals nothing about the code.
+
+\section{How people chat and call privately}
+\label{sec:reach}
+
+Nobody can message or call an owner out of the blue: every contact starts from one of the owner's links or codes, and both parties' numbers stay hidden throughout.
+
+\begin{enumerate}
+  \item \textbf{The owner shares a token.} The token's tier sets the checks; its options decide whether chat, an in-app call or a watermarked view of the number are offered. Calls are always in the app; codes without a phone number offer only chat and calls.
+  \item \textbf{The caller opens it and passes the gate.} They sign in (or create an account and come straight back), prove they're a person and, on Tier 2 and 3, confirm a code emailed to them.
+  \item \textbf{The caller chooses how to connect.} Each option is a card that explains what happens next:
+  \begin{itemize}
+    \item \ui{Chat in the app} opens an encrypted conversation. The owner gets an in-app and email notification and an unread count on \ui{Chats}.
+    \item \ui{Call in the app} rings the owner's open PryingEyes over the internet. Audio goes browser to browser through PryingEyes' own TURN relay, so no phone numbers are involved and IP addresses stay hidden. If the owner's app is closed, they get a missed call (section~\ref{sec:calllife}).
+    \item \ui{Phone call through PryingEyes} (optional, when the operator enables it) rings the owner from the platform number with a whisper (``\ldots press 1 to accept''), then rings the caller's phone and joins the two calls.
+    \item \ui{Show the number} shows a watermarked image for 60 seconds.
+  \end{itemize}
+  \item \textbf{They carry on in Chats.} Replies notify the other side (at most every 15 minutes per chat, never with message text). While the caller's gate request is still valid and the token allows calls, the chat offers the caller \ui{Call in the app}. The owner's view explains that only the person who made contact can start a call. Calls appear in the chat timeline (``In-app call · 3:12'', ``Missed call''). Either side can block or report at any time.
+\end{enumerate}
+
+\section{In-app call lifecycle}
+\label{sec:calllife}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[circle,fill=ink,inner sep=3.5pt] (s) at (0,3.6) {};
+  \node[state] (ring) at (0,1.6) {ringing};
+  \node[state,draw=good,text=good] (acc) at (0,-1.0) {accepted};
+  \node[state] (end) at (0,-3.4) {ended};
+  \node[state,draw=bad,text=bad] (mis) at (-5.2,1.6) {missed};
+  \node[state] (dec) at (5.2,2.8) {declined};
+  \node[state] (can) at (5.2,0.4) {cancelled};
+  \node[state] (busy) at (-5.2,3.6) {busy};
+
+  \draw[arrow] (s) -- node[lbl,right]{caller starts} (ring);
+  \draw[arrow] (s) -- node[lbl,above]{owner on another call} (busy);
+  \draw[arrow] (ring) -- node[lbl,above,align=center]{no answer in 45 s\\(app closed)} (mis);
+  \draw[arrow] (ring) -- node[lbl,above,sloped]{owner declines} (dec.west);
+  \draw[arrow] (ring) -- node[lbl,below,sloped]{caller cancels} (can.west);
+  \draw[arrow] (ring) -- node[lbl,right]{owner answers} (acc);
+  \draw[arrow] (acc) -- node[lbl,right,align=left]{either hangs up; a side silent 30 s;\\no audio in 20 s; 2 h limit} (end);
+\end{tikzpicture}
+\end{fitfig}
+\caption{In-app call states. \emph{Missed}, \emph{busy}, and \emph{cancelled} while the owner's app was closed all notify the owner.}
+\label{fig:callstates}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm,font=\sffamily\scriptsize]
+  \foreach \n/\x/\t in {c/0/Caller's browser, a/4.6/PryingEyes API + Redis, t/9.2/TURN relay, o/13.8/Owner's browser} {
+    \node[comp,minimum width=2.8cm] (\n) at (\x,0) {\t};
+    \draw[line width=0.5pt,dashed,draw=muted] (\n.south) -- (\x,-9.6);
+  }
+  \def\msg#1#2#3#4{\draw[arrow] (#1,#3) -- node[lbl,above,align=center]{#4} (#2,#3);}
+  \msg{0}{4.6}{-0.9}{choose \code{app_call}}
+  \msg{13.8}{4.6}{-1.7}{poll \code{/calls/incoming} (every 3 s)}
+  \msg{4.6}{13.8}{-2.5}{``@handle is calling''}
+  \msg{13.8}{4.6}{-3.3}{\code{accept}}
+  \msg{0}{4.6}{-4.1}{TURN credentials}
+  \msg{0}{4.6}{-4.9}{offer (relay candidates only)}
+  \msg{4.6}{13.8}{-5.7}{offer (taken once, then deleted)}
+  \msg{13.8}{4.6}{-6.5}{answer + ICE}
+  \msg{4.6}{0}{-7.3}{answer + ICE}
+  \draw[arrow,draw=good,line width=1pt] (0,-8.3) -- node[lbl,above]{encrypted audio (DTLS-SRTP)} (9.2,-8.3);
+  \draw[arrow,draw=good,line width=1pt] (9.2,-8.3) -- (13.8,-8.3);
+  \msg{0}{4.6}{-9.2}{\code{hangup} $\to$ metadata only}
+\end{tikzpicture}
+\end{fitfig}
+\caption{An answered in-app call. The API never sees audio; TURN forwards packets it cannot decrypt, and each side only sees the relay's address.}
+\label{fig:callseq}
+\end{figure}
+
+\section{Native app contract}
+\label{sec:native}
+
+The future iOS and Android apps use the same HTTP API and state machine as the website. Only delivery of the incoming call changes:
+\begin{enumerate}
+  \item \textbf{Ringing a closed app.} The server will send a VoIP push (APNs PushKit on iOS, a high-priority FCM data message on Android) from \code{notifyIncoming()} in \fpath{src/lib/calls.ts}. The app shows the system call screen (CallKit or ConnectionService) and, on answer, posts \code{accept} as the website does. If no device answers within \code{CALL_RING_SECONDS}, the call becomes \emph{missed} exactly as today.
+  \item \textbf{Media.} Native WebRTC (libwebrtc) uses the credentials from \code{GET /api/calls/ice} with \code{iceTransportPolicy = relay}, and the same offer, answer and ICE messages through \code{/api/calls/[id]/signal}.
+  \item \textbf{Liveness.} The app keeps polling \code{GET /api/calls/[id]/signal} during a call, or switches to a WebSocket later. Silence for 30 seconds ends the call.
+  \item \textbf{Unchanged:} gate rules, who may call whom, busy and missed handling, notifications, the chat timeline, metadata-only records and audit events.
+\end{enumerate}
+
+\section{A complete Tier 3 contact}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm,font=\sffamily\scriptsize]
+  \foreach \n/\x/\t in {c/0/Caller (browser), a/4.6/PryingEyes, p/9.2/Messaging provider, o/13.8/Owner} {
+    \node[comp,minimum width=2.8cm] (\n) at (\x,0) {\t};
+    \draw[ink!40,dashed,line width=0.6pt] (\n.south) -- (\x,-15.4);
+  }
+  \newcommand{\msg}[5][]{\draw[arrow,#1] (#2,#4) -- node[lbl,above,align=center]{#5} (#3,#4);}
+  \msg{0}{4.6}{-0.9}{1. open link, sign in, check}
+  \msg{4.6}{0}{-1.6}{2. Tier 3 request: send a code?}
+  \msg{0}{4.6}{-2.3}{3. send code}
+  \msg{4.6}{9.2}{-3.0}{4. email to the caller}
+  \msg[dashed]{9.2}{0}{-3.7}{5. 6-digit code}
+  \msg{0}{4.6}{-4.4}{6. confirm code}
+  \msg{0}{4.6}{-5.1}{7. request + note}
+  \msg{4.6}{13.8}{-5.8}{8. in-app + email: ``@handle wants to reach you''}
+  \draw[draw=accent2,fill=soft,rounded corners=2pt] (-1.9,-6.1) rectangle (1.9,-6.9);
+  \node[align=center] at (0,-6.5) {waiting; polls every 5 s};
+  \msg{13.8}{4.6}{-7.3}{9. reviews handle, verification, region, reports;\\ chooses Allow messages and calls}
+  \msg[dashed]{4.6}{0}{-8.2}{10. options: chat, call in the app}
+  \msg{0}{4.6}{-8.9}{11. call in the app}
+  \msg{4.6}{13.8}{-9.6}{12. rings the owner's open app}
+  \msg{13.8}{4.6}{-10.3}{13. answers}
+  \draw[draw=good,line width=1.2pt,{Stealth[length=2mm]}-{Stealth[length=2mm]}] (0.2,-11.5) -- node[lbl,above]{14. encrypted audio through the TURN relay — no numbers, no IP addresses} (13.6,-11.5);
+  \msg{0}{4.6}{-12.6}{15. hang up: duration recorded}
+  \node[draw=accent2,fill=soft,rounded corners=2pt,align=center,text width=7.6cm,inner sep=4pt] at (6.9,-14.3)
+    {audit chain: consent.approved\_relay, call.started, call.answered,\\call.ended (metadata only; calls are never recorded)};
+\end{tikzpicture}
+\end{fitfig}
+\caption{Sequence — Tier 3 request approved, then an in-app call}
+\label{fig:seq-tier3}
+\end{figure}
+
+\section{Token lifecycle}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[circle,fill=ink,inner sep=3.5pt] (s) at (0,3.9) {};
+  \node[state,draw=good,text=good] (act) at (0,1.2) {active};
+  \node[state] (pau) at (-5,2.4) {paused};
+  \node[state,draw=bad,text=bad] (fro) at (-5,-0.4) {frozen};
+  \node[state] (exp) at (5,2.4) {expired};
+  \node[state] (con) at (5,-0.4) {consumed};
+  \node[state,draw=bad,text=bad] (rev) at (0,-2.4) {revoked};
+
+  \draw[arrow] (s) -- node[lbl,right,pos=0.3]{create, rotate or clone} (act);
+  \draw[arrow] (act.north west) to[bend right=12] node[lbl,above,sloped]{pause} (pau.east);
+  \draw[arrow] (pau.south east) to[bend right=12] node[lbl,below,sloped]{resume} (act.west);
+  \draw[arrow] (act.west) ++(0,-0.2) to[bend right=10] node[lbl,above,sloped,pos=0.45]{10 failures in 1 h} (fro.north east);
+  \draw[arrow] (fro.east) to[bend right=10] node[lbl,below,sloped]{resume} (act.south west);
+  \draw[arrow] (act.north east) to[bend left=12] node[lbl,above,sloped]{TTL reached} (exp.west);
+  \draw[arrow] (exp.south west) to[bend left=12] node[lbl,below,sloped]{extend} (act.east);
+  \draw[arrow] (act.south east) -- node[lbl,above,sloped,pos=0.45]{budget used (disposable)} (con.west);
+  \draw[arrow] (act) -- node[lbl,right,align=left]{revoke, rotate,\\panic} (rev);
+  \draw[arrow] (pau.west) -- ++(-0.5,0) |- node[lbl,pos=0.75,above]{revoke / panic} ([yshift=0.15cm]rev.west);
+  \draw[arrow] (fro.south) |- ([yshift=-0.15cm]rev.west);
+  \draw[arrow] (exp.east) -- ++(0.5,0) |- node[lbl,pos=0.75,above]{rotate / panic} ([yshift=0.15cm]rev.east);
+\end{tikzpicture}
+\end{fitfig}
+\caption{Token states}
+\label{fig:tokenstates}
+\end{figure}
+
+Only \emph{active} tokens pass the gate. \emph{Revoked} and \emph{consumed} are final. A caller who already completed an outcome on a disposable token can still use the chat and call options of that same request.
+
+\section{Gate request lifecycle}
+
+\begin{figure}[H]
+\centering
+\begin{fitfig}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \node[state] (st) at (0,0) {started};
+  \node[state] (os) at (3.4,0) {otp\_sent};
+  \node[state,draw=good,text=good] (ve) at (6.9,0) {verified};
+  \node[state] (cp) at (10.7,0) {consent\_pending};
+  \node[state,draw=good,text=good] (ar) at (15.2,1.4) {approved\_relay};
+  \node[state,draw=good,text=good] (av) at (15.2,-0.2) {approved\_reveal};
+  \node[state,draw=bad,text=bad] (de) at (10.7,-2.1) {declined};
+  \node[state,draw=bad,text=bad] (ex) at (15.2,-2.1) {expired};
+  \draw[arrow] (st) -- node[lbl,above]{send code} (os);
+  \draw[arrow] (os) -- node[lbl,above]{code ok} (ve);
+  \draw[arrow] (ve) -- node[lbl,above]{T3: ask} (cp);
+  \draw[arrow] (cp) -- node[lbl,above,sloped]{approve} (ar.west);
+  \draw[arrow] (cp) -- node[lbl,below,sloped,pos=0.4]{reveal once} (av.west);
+  \draw[arrow] (av.east) to[bend right=50] node[lbl,right]{after the reveal} (ar.east);
+  \draw[arrow] (cp) -- node[lbl,right]{decline} (de);
+  \draw[arrow] (cp.south east) -- node[lbl,above,sloped]{24 h} (ex);
+  \node[lbl,align=center] at (6.9,1.25) {Tier 1 starts here;\\Tier 2 chooses here};
+  \draw[arrow,dashed] (6.9,0.85) -- (ve.north);
+  \node[lbl,align=left,text width=5.6cm,anchor=north west] at (-0.8,-1.2) {Any open request also becomes \emph{declined} on a panic revoke-all; a revoked token makes every request \emph{unavailable} immediately.};
+\end{tikzpicture}
+\end{fitfig}
+\caption{Gate request stages}
+\label{fig:reqstates}
+\end{figure}

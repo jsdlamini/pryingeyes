@@ -1,0 +1,110 @@
+\chapter{Safe groups and statuses}
+\label{ch:social}
+
+People often end up posting their phone number, name or email in a community group, or on their own status, because that's the easiest way to be reachable. Anyone in the group, and anyone they forward it to, then has it for good. PryingEyes groups and statuses remove that pressure:
+\begin{itemize}
+  \item contact details can't be posted as text;
+  \item an author who wants to be reachable attaches a \textbf{contact code};
+  \item tapping the code opens PryingEyes on the decode gate with the code already filled in, so nobody copies or pastes anything.
+\end{itemize}
+
+\section{What people can do}
+
+\begin{tabularx}{\linewidth}{@{}L{4.2cm}Y@{}}
+\toprule
+\thead{Action} & \thead{Rules} \\
+\midrule
+Start a group & Any signed-in account. The creator is admin and gets an invite link \fpath{/g/<invite>}. Names and descriptions pass the contact-details guard. \\
+Ask to join & Anyone signed in can find a \emph{listed} group in search, or open any group's invite link, and ask to join with an optional note. Only the group's creator or an admin they appointed can let them in; admins are notified, and so is the person once approved. The invite travels in the request body, never in a query string, and nginx doesn't log \fpath{/g/} paths. \\
+Post in a group & Members only. Text only (no images), up to 1{,}000 characters, 30 posts an hour. \\
+Attach a contact code & Anyone 18+; two-step sign-in only if the code shows a phone number. The author picks the tier (default Verified) and how long it works: until switched off, 24 hours, or one person only. The same works in statuses and private chats. \\
+Post a status & Visible for 24 hours to people who share at least one group with the author. Same guard, same code option. \\
+Delete & Authors delete their own posts; group admins can delete any post in their group. \\
+Report & Goes to the moderation queue with the post text attached, and notifies the group admins. Optionally blocks the author, which hides their posts both ways. Moderators can \ui{Remove post}. \\
+Manage members & Admins approve or decline join requests, choose whether the group shows in search, reset the invite link (the old one stops working), remove members and make admins. The last admin to leave hands over to the longest-standing member. \\
+\bottomrule
+\end{tabularx}
+
+\section{The contact-details guard}
+
+\fpath{src/lib/guard.ts} runs on every group name, description, post and status, on the server. It refuses:
+\begin{itemize}
+  \item \textbf{phone numbers}, found with libphonenumber for the default country, plus any run of seven or more digits separated only by spaces, dots, dashes or brackets;
+  \item \textbf{email addresses}, including \emph{name at gmail dot com} and \emph{[at]}/\emph{[dot]} forms;
+  \item \textbf{messaging links}: wa.me, t.me, signal.me, m.me, \code{tel:}, \code{sms:}, \code{mailto:}.
+\end{itemize}
+Before checking, it rewrites disguises: digit words (\emph{seven six one two}, \emph{double seven}), full-width digits, and O or l used as 0 or 1 inside numbers. Dates, times, prices and PryingEyes codes are allowed. A refusal returns \code{contact\_info\_detected} with what was found and a pointer to contact codes; the apps then switch on \ui{Attach my contact code}. Refusals are audited as \code{post.rejected\_contact}, without the text.
+
+The guard is strict on purpose. A false positive costs a rewording; a false negative publishes someone's number.
+
+\section{Contact codes on posts}
+
+\begin{itemize}
+  \item Attaching a code mints a token from the author's protected number, labelled \emph{Group: <name>} or \emph{Status updates}. Later posts in the same place reuse it while it's active.
+  \item Each group therefore has its own code. The owner sees where each request came from, and revoking one group's code on the dashboard switches it off in that group only. Posts then show \emph{This contact code has been switched off}.
+  \item Post text and the attached code are encrypted under the author's data key, so erasing the account erases them.
+  \item Members see the short code and a link \fpath{https://<host>/t/<code>}. The decode gate applies exactly as for any other code: human check, the tier's checks, budgets, audit.
+\end{itemize}
+
+\section{Links that open the app}
+
+\begin{description}
+  \item[Universal and App Links.] Builds made with \code{EXPO\_PUBLIC\_API\_URL=https://<host>} declare the host for \fpath{/t/*} and \fpath{/g/*}: an Android intent filter with \code{autoVerify}, and the iOS associated domain. The server publishes \fpath{/.well-known/assetlinks.json} (from \code{ANDROID\_CERT\_SHA256}) and \fpath{/.well-known/apple-app-site-association} (from \code{IOS\_TEAM\_ID}). The phone then opens the app straight on the gate or the join screen.
+  \item[Custom scheme.] \fpath{pryingeyes://t/<code>} and \fpath{pryingeyes://g/<invite>} work in every build. The website's \ui{Open in the app} banner on phones uses them.
+  \item[Sign-in in between.] If the person isn't signed in, the code or invite is kept through sign-up and sign-in, and they land back on it.
+  \item[Paste.] For codes copied from elsewhere, the app's \ui{Paste} button reads the clipboard and goes straight to the gate.
+\end{description}
+
+\section{API}
+
+\begin{tabularx}{\linewidth}{@{}L{6.4cm}Y@{}}
+\toprule
+\thead{Endpoint} & \thead{Purpose} \\
+\midrule
+\code{GET|POST /api/groups} & List my groups; create one \\
+\code{POST /api/groups/join} & \code{\{invite, preview?, note?\}}: preview, or ask to join by invite \\
+\code{GET /api/groups/discover?q=} & Search listed groups \\
+\code{POST /api/groups/:id/join} & \code{\{note?, cancel?\}}: ask to join a listed group, or withdraw \\
+\code{GET|POST /api/groups/:id/requests} & Admins: list requests; \code{\{userId, decision: approve|decline\}} \\
+\code{GET|PATCH /api/groups/:id} & Details, members, invite (admins); rename \\
+\code{POST /api/groups/:id/invite} & New invite link \\
+\code{POST /api/groups/:id/leave} & Leave \\
+\code{POST /api/groups/:id/members} & \code{\{userId, action: remove|make\_admin\}} \\
+\code{GET|POST /api/groups/:id/posts} & Feed; post \code{\{text, attach?: \{numberId?, tier, kind?\}\}} (\code{kind}: standard, day, one) \\
+\code{POST /api/chats/:id/messages} & \code{\{text, attach?\}}: a message, optionally carrying a fresh contact code \\
+\code{GET|POST /api/status} & Status feed grouped by person; post a status \\
+\code{DELETE /api/posts/:id} & Delete (author or group admin) \\
+\code{POST /api/posts/:id/report} & \code{\{reason, details?, block?\}} \\
+\bottomrule
+\end{tabularx}
+
+The tables \code{groups}, \code{group\_members} and \code{posts}, and the column \code{reports.post\_id}, come from migration \fpath{drizzle/0003\_social.sql}. Expired statuses are deleted by the retention job.
+
+\section{Codes without a phone number}
+\label{sec:app-only}
+
+Since version 0.6.0 a code doesn't need a phone number behind it, and calls never use the phone network.
+\begin{itemize}
+  \item \textbf{App-only codes} (the default) have no number. Callers who pass the gate can \ui{Send a message} or \ui{Call in the app} over data, through the TURN relay. Nobody's number or IP address is shown.
+  \item \textbf{Anyone can share.} An account that is verified and 18+ can create app-only codes, attach them in groups, take Tier 3 requests and see activity straight away. Two-step sign-in isn't required, because no number is stored.
+  \item \textbf{Showing a number is optional.} An owner can add a number (\ui{Settings} $\rightarrow$ \ui{Show my number}) after setting up two-step sign-in, then pick it when creating a code. Callers on that code may then see it once, as a 60-second watermarked image. Creating, renewing or replacing such a code, and approving \ui{Show my number once}, need two-step sign-in. Pausing or revoking never does.
+  \item \textbf{Email only (0.7.0).} Accounts sign up with email and password; no text messages are sent. Tier 2 and 3 codes are emailed. People see the handle, never the email.
+  \item Gate options are therefore \code{chat} and \code{app_call}, plus \code{reveal} only on a code with a number. Migration \fpath{0004\_app\_only\_codes} makes \code{tokens.number\_id} optional; \fpath{0005\_drop\_phone\_relay} removes the old phone-call table.
+\end{itemize}
+
+\section{Codes shared anywhere}
+\label{sec:codes-anywhere}
+
+Contact codes are meant to be passed around. A code can be attached to a group post, a status or a private chat message, and any code or code link typed into a post or a chat becomes tappable. Tapping one opens the owner's decode gate with the code already filled in; from there the caller messages or calls the owner in the app.
+
+\begin{tabularx}{\linewidth}{@{}L{3.4cm}Y@{}}
+\toprule
+\thead{How long} & \thead{Behaviour} \\
+\midrule
+Until switched off & Reused for later posts in the same group (or the status feed); the owner revokes it on \ui{My codes}. \\
+24 hours & A new code each time; it expires a day later, like a status. \\
+One person & A new code each time; it stops after the first person gets through the gate. The card then says it has been used. \\
+\bottomrule
+\end{tabularx}
+
+A code shared in a chat is labelled \emph{Shared with @handle}, so the owner can see on \ui{My codes} and in Activity where a contact came from.

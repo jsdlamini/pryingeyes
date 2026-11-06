@@ -1,0 +1,1 @@
+ALTER TABLE "tokens" ALTER COLUMN "number_id" DROP NOT NULL;

@@ -1,0 +1,73 @@
+"use client";
+import { useState } from "react";
+import { api, errMsg } from "@/components/api";
+import { passkeysSupported, authenticateWithPasskey } from "@/components/passkey";
+import { HandleField } from "@/components/HandleField";
+import { Icon } from "@/components/Icon";
+
+const nextUrl = () => {
+  const n = new URLSearchParams(window.location.search).get("next");
+  return n?.startsWith("/") && !n.startsWith("//") ? n : "/groups";
+};
+function after(status: string) {
+  window.location.href = status === "mfa_required" ? `/login/mfa?next=${encodeURIComponent(nextUrl())}` : nextUrl();
+}
+
+export function AuthTabs() {
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
+  const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  // sign-in
+  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  // sign-up
+  const [se, setSe] = useState(""); const [sp, setSp] = useState(""); const [sh, setSh] = useState("");
+  const [sa, setSa] = useState(false); const [sent, setSent] = useState(false); const [handleOk, setHandleOk] = useState(true);
+
+  async function signIn(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr("");
+    try { after((await api("/api/auth/login", { body: { email, password } })).status); }
+    catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
+  }
+  async function passkey() {
+    setErr(""); setBusy(true);
+    try { after((await authenticateWithPasskey()).status); } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
+  }
+  async function signUp(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setErr("");
+    try { await api("/api/auth/signup", { body: { email: se, password: sp, handle: sh, ageConfirmed: sa, next: nextUrl() } }); setSent(true); }
+    catch (x: any) { if (x?.body?.suggestion) setSh(x.body.suggestion); setErr(errMsg(x)); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="auth-card">
+      <div className="auth-tabs" role="tablist" aria-label="Account">
+        <button type="button" role="tab" aria-selected={tab === "signin"} className={tab === "signin" ? "on" : ""} onClick={() => { setTab("signin"); setErr(""); }}>Sign in</button>
+        <button type="button" role="tab" aria-selected={tab === "signup"} className={tab === "signup" ? "on" : ""} onClick={() => { setTab("signup"); setErr(""); }}>Create account</button>
+      </div>
+      {err && <div className="alert err" role="alert">{err}</div>}
+
+      {tab === "signin" ? (
+        <div className="stack">
+          {passkeysSupported() && <button type="button" className="btn block social" onClick={passkey} disabled={busy}><Icon name="key" size={18} />Sign in with a passkey</button>}
+          <form onSubmit={signIn} className="stack">
+            <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <button className="btn block" disabled={busy}>Sign in</button>
+          </form>
+        </div>
+      ) : sent ? (
+        <div role="status">
+          <h2>Check your email</h2>
+          <p>We sent a confirmation link to <b>{se}</b>. It expires in 24 hours.</p>
+        </div>
+      ) : (
+        <form onSubmit={signUp} className="stack">
+          <div className="field"><label htmlFor="se">Email</label><input id="se" type="email" autoComplete="email" required value={se} onChange={(e) => setSe(e.target.value)} /></div>
+          <div className="field"><label htmlFor="sp">Password</label><input id="sp" type="password" autoComplete="new-password" minLength={10} required value={sp} onChange={(e) => setSp(e.target.value)} /><p className="hint">At least 10 characters. A short sentence works well.</p></div>
+          <HandleField value={sh} onChange={setSh} onValidity={setHandleOk} />
+          <label className="check field"><input type="checkbox" checked={sa} onChange={(e) => setSa(e.target.checked)} /> <span>I&apos;m 18 or older and accept the <a href="/privacy" target="_blank">privacy notice</a>.</span></label>
+          <button className="btn block" disabled={busy || !sa || !handleOk}>Create account</button>
+        </form>
+      )}
+    </div>
+  );
+}

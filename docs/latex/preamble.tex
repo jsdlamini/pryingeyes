@@ -1,0 +1,172 @@
+% =====================================================================
+%  PryingEyes documentation — preamble (styles, colours, UML macros)
+% =====================================================================
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,top=2.4cm,bottom=2.4cm,left=2.3cm,right=2.3cm,headheight=15pt]{geometry}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{needspace}
+\usepackage[export]{adjustbox}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,shapes.misc,shapes.multipart,positioning,arrows.meta,fit,backgrounds,calc}
+\usepackage[most]{tcolorbox}
+\usepackage{booktabs,tabularx,longtable,array}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage[font=small,labelfont={bf,sf},textfont=sf]{caption}
+\usepackage{amsmath,amssymb}
+\usepackage{pifont}
+\PassOptionsToPackage{spaces,hyphens}{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{bookmark}
+
+% ---- colours --------------------------------------------------------
+\definecolor{ink}{HTML}{1C2431}
+\definecolor{ink2}{HTML}{3A4352}
+\definecolor{muted}{HTML}{5A6372}
+\definecolor{accent}{HTML}{B2531C}
+\definecolor{accent2}{HTML}{D4875A}
+\definecolor{soft}{HTML}{FDF5EF}
+\definecolor{softgrey}{HTML}{F4F5F7}
+\definecolor{rule}{HTML}{E3E6EB}
+\definecolor{good}{HTML}{1D7A46}
+\definecolor{bad}{HTML}{B0352A}
+\definecolor{tone}{HTML}{1F5AA6}
+\definecolor{ttwo}{HTML}{5B3FB0}
+\definecolor{tthree}{HTML}{B2531C}
+
+\hypersetup{colorlinks=true,linkcolor=accent,urlcolor=accent,citecolor=accent,
+  pdftitle={PryingEyes — System Documentation},pdfauthor={Johnson Sikhumbuzo Dlamini}}
+
+% ---- layout ---------------------------------------------------------
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\linespread{1.06}
+\setlist{nosep,leftmargin=1.4em,topsep=0.3em}
+\setlist[enumerate]{label=\arabic*.}
+
+\titleformat{\chapter}[display]
+  {\sffamily\color{ink}}
+  {\color{accent}\small\bfseries\MakeUppercase{\chaptertitlename}\ \thechapter}
+  {0.4em}{\Huge\bfseries}[\vspace{0.3em}{\color{accent2}\titlerule[1.2pt]}]
+\titlespacing*{\chapter}{0pt}{-10pt}{22pt}
+\titleformat{\section}{\sffamily\Large\bfseries\color{ink}}{\color{accent}\thesection}{0.7em}{}
+\titleformat{\subsection}{\sffamily\large\bfseries\color{ink}}{\color{accent}\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\sffamily\normalsize\bfseries\color{ink2}}{}{0em}{}
+\titlespacing*{\section}{0pt}{1.4em}{0.5em}
+\let\origsection\section
+\renewcommand{\section}{\needspace{8\baselineskip}\origsection}
+\titlespacing*{\subsection}{0pt}{1.1em}{0.35em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\footnotesize\color{muted}PryingEyes — System Documentation}
+\fancyhead[R]{\sffamily\footnotesize\color{muted}\nouppercase{\leftmark}}
+\fancyfoot[C]{\sffamily\footnotesize\color{muted}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{{\color{rule}\hrule width\headwidth height\headrulewidth}}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\sffamily\footnotesize\color{muted}\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+% ---- inline helpers -------------------------------------------------
+\urlstyle{tt}
+\DeclareRobustCommand{\code}[1]{\texttt{\small\detokenize{#1}}}   % inline code: keeps spaces and underscores
+\emergencystretch=2em
+\newcommand{\fpath}[1]{{\small\nolinkurl{#1}}}
+\newcommand{\ui}[1]{\textsf{\textbf{#1}}}          % a button or label in the interface
+\newcommand{\tier}[2]{\tikz[baseline=(t.base)]\node[fill=#1!12,text=#1,rounded corners=4pt,inner xsep=4pt,inner ysep=1.5pt,font=\sffamily\scriptsize\bfseries](t){#2};}
+\newcommand{\yes}{\textcolor{good}{\ding{51}}}
+\newcommand{\no}{\textcolor{bad}{\ding{55}}}
+\newcommand{\pri}{\textcolor{accent}{\ding{108}}}
+\newcommand{\sdy}{\textcolor{muted}{\ding{109}}}
+\newcommand{\guil}[1]{\guillemotleft #1\guillemotright}
+
+% ---- boxes ----------------------------------------------------------
+\newtcolorbox{note}[1][Note]{enhanced,breakable,colback=soft,colframe=accent2,boxrule=0pt,leftrule=3pt,arc=0pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt,fontupper=\small,title={\sffamily\bfseries #1},coltitle=accent,
+  attach title to upper={\par\smallskip},before skip=0.8em,after skip=0.8em}
+\newtcolorbox{warn}[1][Important]{enhanced,breakable,colback=red!3,colframe=bad,boxrule=0pt,leftrule=3pt,arc=0pt,
+  left=8pt,right=8pt,top=5pt,bottom=5pt,fontupper=\small,title={\sffamily\bfseries #1},coltitle=bad,
+  attach title to upper={\par\smallskip},before skip=0.8em,after skip=0.8em}
+
+% ---- code listings (ASCII only inside listings) --------------------
+\lstdefinestyle{shell}{basicstyle=\ttfamily\small\color{ink},backgroundcolor=\color{softgrey},frame=single,
+  rulecolor=\color{rule},framesep=6pt,xleftmargin=6pt,xrightmargin=6pt,breaklines=true,breakatwhitespace=true,
+  columns=fullflexible,keepspaces=true,showstringspaces=false,commentstyle=\color{muted}\itshape,
+  morecomment=[l]{\#},aboveskip=0.7em,belowskip=0.7em,upquote=true}
+\lstset{style=shell}
+
+% ---- tables ---------------------------------------------------------
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\renewcommand{\arraystretch}{1.25}
+\newcommand{\thead}[1]{\textsf{\textbf{\small #1}}}
+
+% ---- use-case specification card ------------------------------------
+% \begin{ucspec}{ID}{Name} \ucf{Field}{text} ... \end{ucspec}
+\newtcolorbox{ucspec}[2]{enhanced,breakable,colback=white,colframe=rule,boxrule=0.6pt,arc=2pt,
+  left=7pt,right=7pt,top=4pt,bottom=4pt,colbacktitle=softgrey,coltitle=ink,
+  title={\sffamily\bfseries\textcolor{accent}{#1}\hspace{0.7em}#2},fonttitle=\normalsize,
+  before skip=0.9em,after skip=0.6em,fontupper=\small}
+\newcommand{\ucf}[2]{\par\noindent
+  \begin{minipage}[t]{2.75cm}\raggedright\sffamily\bfseries\footnotesize\color{muted}#1\end{minipage}%
+  \begin{minipage}[t]{\dimexpr\linewidth-2.75cm\relax}\raggedright #2\end{minipage}\par\vspace{3pt}}
+\newenvironment{flow}{\begin{enumerate}[nosep,leftmargin=1.3em,label=\arabic*.,topsep=0pt]}{\end{enumerate}}
+\newenvironment{alts}{\begin{itemize}[nosep,leftmargin=1.1em,label=\textcolor{accent2}{\textbullet},topsep=0pt]}{\end{itemize}}
+
+% ---- TikZ UML styles -------------------------------------------------
+\tikzset{
+  uc/.style={ellipse,draw=ink!75,fill=soft,line width=0.6pt,align=center,font=\sffamily\footnotesize,
+    text width=2.8cm,inner sep=0pt,minimum height=1.0cm,
+    execute at begin node={\hyphenpenalty=10000\exhyphenpenalty=10000}},
+  ucw/.style={uc,text width=2.7cm},
+  ucg/.style={uc,fill=softgrey},                     % included / supporting use case
+  sysbox/.style={draw=ink,line width=0.8pt,rounded corners=4pt,fill=white,inner sep=0.42cm},
+  systitle/.style={font=\sffamily\bfseries\small,text=ink,anchor=north west,inner sep=4pt},
+  assoc/.style={draw=ink!70,line width=0.55pt},
+  incl/.style={draw=accent,dashed,line width=0.55pt,-{Stealth[length=2.2mm]}},
+  stereo/.style={font=\sffamily\scriptsize,text=accent,fill=white,inner sep=1pt},
+  gen/.style={draw=ink,line width=0.6pt,-{Triangle[open,length=2.6mm,width=2.6mm]}},
+  sysactor/.style={draw=ink!75,fill=softgrey,rounded corners=2pt,font=\sffamily\scriptsize,align=center,
+    inner sep=4pt,minimum width=2.1cm},
+  % architecture / flow styles
+  comp/.style={draw=ink!70,fill=white,rounded corners=3pt,line width=0.6pt,font=\sffamily\footnotesize,align=center,
+    inner sep=5pt,minimum height=0.9cm},
+  compa/.style={comp,fill=soft,draw=accent2},
+  store/.style={cylinder,shape border rotate=90,aspect=0.18,draw=ink!70,fill=softgrey,font=\sffamily\footnotesize,
+    align=center,minimum width=2.3cm,minimum height=1.1cm,line width=0.6pt},
+  flowbox/.style={draw=ink!70,fill=white,rounded corners=2pt,font=\sffamily\footnotesize,align=center,
+    text width=3.3cm,inner sep=4pt,minimum height=0.8cm,line width=0.55pt,
+    execute at begin node={\hyphenpenalty=10000\exhyphenpenalty=10000}},
+  decision/.style={diamond,aspect=2.4,draw=ink!70,fill=soft,font=\sffamily\scriptsize,align=center,inner sep=1pt,
+    text width=2.1cm,line width=0.55pt,execute at begin node={\hyphenpenalty=10000\exhyphenpenalty=10000}},
+  terminal/.style={rounded rectangle,draw=ink,fill=ink,text=white,font=\sffamily\footnotesize\bfseries,
+    inner xsep=8pt,minimum height=0.7cm},
+  badend/.style={rounded rectangle,draw=bad,fill=red!6,text=bad,font=\sffamily\footnotesize\bfseries,inner xsep=6pt,
+    minimum height=0.7cm},
+  arrow/.style={draw=ink!80,line width=0.55pt,-{Stealth[length=2mm]}},
+  lbl/.style={font=\sffamily\scriptsize,text=muted,fill=white,inner sep=1pt},
+  state/.style={draw=ink!70,fill=white,rounded corners=7pt,font=\sffamily\footnotesize\bfseries,minimum width=2.1cm,
+    minimum height=0.85cm,line width=0.6pt},
+  entity/.style={draw=ink!70,fill=white,font=\sffamily\scriptsize,align=left,inner sep=3pt,line width=0.55pt,
+    rectangle split,rectangle split parts=2,rectangle split part fill={soft,white}},
+}
+
+% Stick-figure actor. \actor{name}{(x,y)}{label}; a coordinate `name` sits at the chest.
+\newcommand{\actor}[3]{%
+  \begin{scope}[shift={#2}]
+    \draw[ink,line width=0.75pt,fill=white] (0,1.0) circle (0.17);
+    \draw[ink,line width=0.75pt] (0,0.83)--(0,0.38) (-0.3,0.66)--(0.3,0.66) (0,0.38)--(-0.24,0) (0,0.38)--(0.24,0);
+    \node[font=\sffamily\scriptsize\bfseries,text=ink,align=center,anchor=north] at (0,-0.04) {#3};
+    \coordinate (#1) at (0,0.6);
+  \end{scope}}
+% Association line from an actor (shortened so it doesn't overlap the figure)
+\newcommand{\assocline}[2]{\draw[assoc,shorten <=0.38cm] (#1) -- (#2);}
+
+% A figure body that never exceeds the text width
+\newenvironment{fitfig}{\begin{adjustbox}{max width=\linewidth,center}}{\end{adjustbox}}

@@ -1,0 +1,55 @@
+\chapter{Phone app}
+\label{ch:mobile}
+
+The \fpath{mobile/} folder holds the iOS and Android app, built with Expo SDK~58, Expo Router and react-native-webrtc. It uses the same server, rules and audit trail as the website. Everything a person can do on the website, they can do in the app:
+\begin{itemize}
+  \item \textbf{Callers:} scan a QR code or type a code, pass the gate, then chat, call in the app or view the number. Screenshots are blocked while the number is shown.
+  \item \textbf{Owners:} set up two-step sign-in, add numbers, create and share codes (with a QR code and the share sheet), decide requests, see notifications and activity, and manage signed-in devices.
+\end{itemize}
+The one difference: passkeys work on the website only; the app uses an authenticator app for two-step sign-in.
+
+\section{Running it}
+
+\begin{enumerate}
+  \item Start the server as in chapter~\ref{ch:setup}: \code{docker compose up -d --wait}, then \code{npm run dev}. The compose file also runs the coturn call relay.
+  \item Phones and emulators can't use \code{localhost} to reach your computer. In the server's \fpath{.env}, set \code{TURN_URLS} to your computer's LAN address, for example \fpath{turn:192.168.1.20:3478?transport=udp}. Open ports 3000/tcp, 3478 and 49160--49200/udp in the firewall.
+  \item In \fpath{mobile/}, run \code{npm ci}, then pick a target:
+  \begin{itemize}
+    \item \textbf{Android emulator:} \code{npx expo run:android}. The app reaches the server at \fpath{http://10.0.2.2:3000} automatically.
+    \item \textbf{iPhone simulator} (macOS): \code{npx expo run:ios}.
+    \item \textbf{Real phone:} \code{npx expo run:android --device} over USB, or a cloud development build with \code{npx eas-cli build --profile development}. On the start screen, choose \ui{Change server address} and enter \fpath{http://<computer-LAN-address>:3000}.
+    \item \textbf{Expo Go:} \code{npm run start:go}. Everything works except calls, which need the native WebRTC module in a development build.
+  \end{itemize}
+\end{enumerate}
+
+\section{How the app authenticates}
+
+\begin{description}
+  \item[Bearer sessions.] A sign-in request that carries \code{X-PE-Client: mobile} returns the session token in the response body instead of a cookie. The app stores it in the phone's keychain or keystore (expo-secure-store) and sends it as \code{Authorization: Bearer}. Expiry, idle timeout, remote sign-out and the device list work as on the website.
+  \item[Device binding.] The session is bound to the install's \code{X-PE-Device} value, the way web sessions are bound to the browser. A token copied to another device is rejected.
+  \item[Cross-site protection.] App requests carry no cookies, so there is no ambient credential for another site to abuse. The server skips the \code{Origin} check only for requests that carry the app header \emph{and} no cookie. Browsers can't add that header cross-site without a CORS preflight, which production never allows.
+  \item[Client settings.] \code{GET /api/config} returns the human-check mode, the Turnstile site key and the development flags. It contains no secrets. In production, the app shows Turnstile in a WebView served from the site's own origin.
+\end{description}
+
+\section{Calls in the app}
+
+The app implements the native-app contract in section~\ref{sec:native}:
+\begin{itemize}
+  \item the same \code{/api/calls/*} endpoints and state machine;
+  \item relay-only ICE settings and short-lived TURN credentials;
+  \item the signal endpoint doubles as the heartbeat.
+\end{itemize}
+While the app is open, it checks for incoming calls every 3 seconds and rings on any screen with a banner and vibration. When the app is closed, the call becomes a missed call. A VoIP push (APNs PushKit, FCM) at \code{notifyIncoming()} will ring a closed app; nothing else changes. Calls run over data, encrypted between the two phones, at about 0.3\,MB a minute.
+
+\section{Checks}
+
+\begin{tabularx}{\linewidth}{@{}L{6.2cm}Y@{}}
+\toprule
+\thead{Command (in \fpath{mobile/})} & \thead{What it checks} \\
+\midrule
+\code{npm run typecheck}, \code{npx expo lint} & TypeScript and ESLint \\
+\code{npm test} & Unit tests: phone-number handling, code parsing, the API client (bearer token, step-up retry, errors) \\
+\code{npm run export:native} & Bundles the app for Android and iOS, which catches native bundling errors without a device \\
+\code{npx playwright test -c playwright.mobile.config.ts} (repository root) & End-to-end tests on the app's web build. One test is an app caller reaching a website owner, chatting both ways, then making an in-app call through the TURN relay. The other is the full owner set-up inside the app. \\
+\bottomrule
+\end{tabularx}

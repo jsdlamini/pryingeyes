@@ -19,7 +19,7 @@ const en = {
   "gate.step.human": "Human check passed",
   "gate.step.human.todo": "Human check",
   "gate.step.code": "Code confirmed",
-  "gate.step.code.todo": "Confirm a code we send you",
+  "gate.step.code.todo": "Confirm it's you",
   "gate.step.ask": "Ask the owner",
   "gate.step.asked": "Owner said yes",
   "gate.otp.title": "Confirm it's you",

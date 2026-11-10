@@ -93,15 +93,15 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
   const stepIdx = !v ? 1 : v.step === "otp" ? 2 : v.step === "consent" || v.step === "waiting" ? 3 : 4;
   return (
     <div className="stack">
-      <div className="card">
-        <span className="muted small">{t("gate.reaching")}</span>
-        <h1 style={{ margin: "2px 0 6px" }}>{v ? v.label : "someone on PryingEyes"}</h1>
-        {v && <Tier n={v.tier} />}
-      </div>
+      <section className="pass reach-pass" aria-label="Who you are reaching">
+        <span className="kicker">{t("gate.reaching")}</span>
+        <span className="pass-name"><h1>{v ? v.label : "someone on PryingEyes"}</h1>{v && <Tier n={v.tier} />}</span>
+        <p className="pass-line">Neither of you sees a phone number or email.{v?.tier === 3 ? " They approve before you can chat." : ""}</p>
+      </section>
       <div className="card stack">
         {err && <div className="alert err" role="alert">{err}</div>}
-        <ol className="steps" aria-label="Progress">
-          <li className="done"><span className="dot"><Icon name="check" size={14} /></span>{t("gate.step.signedin")} as @{p.handle}</li>
+        <ol className="steps h" aria-label="Progress">
+          <li className="done"><span className="dot"><Icon name="check" size={14} /></span><span title={`@${p.handle}`}>{t("gate.step.signedin")}</span></li>
           <li className={stepIdx > 1 ? "done" : "cur"}><span className="dot">{stepIdx > 1 ? <Icon name="check" size={14} /> : "2"}</span>{stepIdx > 1 ? t("gate.step.human") : t("gate.step.human.todo")}</li>
           {(!v || v.tier >= 2) && <li className={stepIdx > 2 ? "done" : stepIdx === 2 ? "cur" : ""}><span className="dot">{stepIdx > 2 ? <Icon name="check" size={14} /> : "3"}</span>{stepIdx > 2 ? t("gate.step.code") : t("gate.step.code.todo")}</li>}
           {(!v || v.tier === 3) && <li className={stepIdx > 3 ? "done" : stepIdx === 3 ? "cur" : ""}><span className="dot">{stepIdx > 3 ? <Icon name="check" size={14} /> : "4"}</span>{stepIdx > 3 ? t("gate.step.asked") : t("gate.step.ask")}</li>}
@@ -119,8 +119,8 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
           <form onSubmit={verifyOtp}>
             <p className="small muted">{maskEmail(p.email) ? <>We emailed a 6-digit code to <b>{maskEmail(p.email)}</b>. It works for 10 minutes.</> : t("gate.otp.sent")}</p>
             <label htmlFor="g-otp">Code</label>
-            <input id="g-otp" className="otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
-            <div className="row" style={{ marginTop: 10 }}><button className="btn" disabled={busy || code.length !== 6}>{t("gate.otp.verify")}</button><button type="button" className="linkbtn small" onClick={sendOtp}>Send a new code</button></div>
+            <input id="g-otp" className="otp cells" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+            <div className="row" style={{ marginTop: 10 }}><button className="btn cta" style={{ minHeight: 46 }} disabled={busy || code.length !== 6}>{t("gate.otp.verify")}</button><button type="button" className="linkbtn small" onClick={sendOtp}>Send a new code</button></div>
           </form>))}
 
         {v?.step === "consent" && (
@@ -132,7 +132,7 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
           </form>)}
 
         {v?.step === "waiting" && <div role="status"><h2>{t("gate.consent.waiting")}</h2><p className="muted small">{t("gate.consent.waiting.body")}</p>
-          <div className="alert info small" style={{ marginTop: 10 }}><b>No need to wait here.</b> You can close this page. If they say yes, we&apos;ll email you a link that brings you straight back.</div></div>}
+          <div className="leave-note"><Icon name="mail" size={18} /><span><b>No need to wait here.</b> You can close this page. If they say yes, we&apos;ll email you a link that brings you straight back.</span></div></div>}
 
         {v?.step === "choose" && !reveal && <>
           <h2>{t("gate.choose")}</h2>

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { ownerOnboard, createToken, callerOpens, emailCode } from "./util";
+import { ownerOnboard, createToken, callerOpens, emailCode, passHumanCheck } from "./util";
 
 test.describe.configure({ mode: "serial" });
 
@@ -45,7 +45,7 @@ test("Tier 3: request with a note → owner approves → caller chats in the app
   const card = page.getByTestId("request-card").first();
   await expect(card).toContainText(`@${c.handle} wants to reach you`);
   await expect(card).toContainText("is the blue bicycle still available");
-  await card.getByRole("button", { name: "Allow messages and calls" }).click();
+  await card.getByRole("button", { name: "Approve", exact: true }).click();   // sent after the 5-second undo window
 
   // Only in-app options: no phone-network call, and no number unless the owner chose to show it.
   await expect(c.page.getByRole("button", { name: /Call in the app/ })).toBeVisible({ timeout: 15_000 });
@@ -61,8 +61,7 @@ test("Tier 3: request with a note → owner approves → caller chats in the app
   await expect(page.getByText(/code\(s\) revoked/)).toBeVisible();
   const again = await caller.newPage();
   await again.goto(link.replace(/^https?:\/\/[^/]+/, ""));
-  await again.getByLabel(/I'm a person, not a bot/).check();
-  await again.getByRole("button", { name: "Continue" }).click();
+  await passHumanCheck(again);
   await expect(again.getByRole("heading", { name: "This code isn't available" })).toBeVisible();
   await caller.close();
 });

@@ -5,7 +5,7 @@
  * (lib/uploads); a view-once photo's file is deleted when it is opened.
  */
 import crypto from "node:crypto";
-import { and, asc, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { audit } from "./audit";
 import { aesGcmDecrypt, aesGcmEncrypt } from "./crypto";
@@ -151,6 +151,9 @@ export async function listMessages(userId: string, convId: string, after?: Date)
   const { reactionsFor } = await import("./reactions");
   const reactionMap = rows.length ? await reactionsFor(userId, "message", rows.map((m) => m.id)) : new Map();
   const { callEventsFor } = await import("./calls");
+  // Photos uploaded since 0.12 have an upload record and were re-encoded without location data.
+  const uploadIds = rows.map((m) => /^\/uploads\/([0-9a-f-]{36})\./.exec(m.attachment ?? "")?.[1]).filter((x): x is string => !!x);
+  const clean = new Set(uploadIds.length ? (await db().select({ id: schema.uploads.id }).from(schema.uploads).where(inArray(schema.uploads.id, uploadIds))).map((u) => u.id) : []);
   return {
     calls: await callEventsFor(c),
     conversation: { id: c.id, label: c.label, role: c.ownerId === userId ? "owner" : "caller", with: o?.handle ?? "deleted user",
@@ -159,6 +162,7 @@ export async function listMessages(userId: string, convId: string, after?: Date)
       id: m.id, mine: m.senderId === userId, at: m.createdAt, expiresAt: m.expiresAt, read: !!m.readAt,
       text: aesGcmDecrypt(key, m.ciphertext, Buffer.from(`msg:${m.id}`)).toString("utf8"),
       attachment: m.attachment, attachmentKind: m.attachmentKind, viewOnce: m.viewOnce,
+      metadataRemoved: !!m.attachment && clean.has(/^\/uploads\/([0-9a-f-]{36})\./.exec(m.attachment)?.[1] ?? ""),
       reactions: reactionMap.get(m.id) ?? [],
     })),
   };

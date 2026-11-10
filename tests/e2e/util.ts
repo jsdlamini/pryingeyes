@@ -82,7 +82,7 @@ export async function ownerOnboard(page: Page) {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   // Codes work without a number; this owner also adds one so that "Show the number" can be tested.
-  await expect(page.getByRole("heading", { name: "My codes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your codes" })).toBeVisible();
   await page.goto("/onboarding");
   await expect(page.getByRole("heading", { name: "Add a phone number" })).toBeVisible();
   await page.getByRole("button", { name: /Create a passkey/ }).click();
@@ -133,7 +133,15 @@ export async function callerOpens(ctx: BrowserContext, link: string) {
   // Back on the same code, already filled in.
   await expect(page).toHaveURL(new RegExp(path.replace(/[-/]/g, "\\$&")));
   await expect(page.getByText("You're trying to reach")).toBeVisible();
-  await page.getByLabel(/I'm a person, not a bot/).check();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await passHumanCheck(page);
   return { page, email, handle };
+}
+
+/** Ticks the human check. Since 0.11 the gate continues by itself; click Continue only if it's still waiting. */
+export async function passHumanCheck(page: Page) {
+  await page.getByLabel(/I'm a person, not a bot/).check();
+  const cont = page.getByRole("button", { name: "Continue" });
+  await page.waitForTimeout(500);
+  if (await cont.isEnabled({ timeout: 500 }).catch(() => false)) await cont.click({ timeout: 2000 }).catch(() => undefined);
+  await expect(cont).toHaveCount(0, { timeout: 10_000 });
 }

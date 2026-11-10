@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { callerOpens, createToken, emailCode, emailSignUp, ownerOnboard } from "./util";
+import { callerOpens, createToken, emailCode, emailSignUp, ownerOnboard, passHumanCheck } from "./util";
 
 test.describe.configure({ mode: "serial" });
 
@@ -18,7 +18,7 @@ test("Groups: numbers are refused, contact codes are shared, and tapping one ope
   // Typing a phone number is refused, and the composer switches to attaching a code.
   await page.getByTestId("composer-input").fill("Fridge for sale, whatsapp me on 7612 3456");
   await page.getByTestId("composer-send").click();
-  await expect(page.locator(".alert.warn")).toContainText("Attach your contact code instead");
+  await expect(page.locator(".alert.warn", { hasText: "looks like it contains" })).toContainText("Attach your contact code instead");
   await expect(page.getByTestId("attach-code")).toHaveAttribute("aria-pressed", "true");
   await page.getByTestId("composer-input").fill("Fridge for sale, E1,500. Collect in Manzini.");
   await page.getByTestId("composer-send").click();
@@ -62,7 +62,7 @@ test("Groups: numbers are refused, contact codes are shared, and tapping one ope
   // The member can't post a number either, even disguised.
   await m.getByTestId("composer-input").fill("Is it available? Call seven six one two three four five six");
   await m.getByTestId("composer-send").click();
-  await expect(m.locator(".alert.warn")).toContainText("phone number");
+  await expect(m.locator(".alert.warn", { hasText: "looks like it contains" })).toContainText("phone number");
   await m.getByTestId("composer-input").fill("Is it still available?");
   await m.getByTestId("composer-send").click();
   await expect(m.getByTestId("post").first()).toContainText("still available");
@@ -77,8 +77,7 @@ test("Groups: numbers are refused, contact codes are shared, and tapping one ope
   await m.getByTestId("code-card").click();
   await expect(m).toHaveURL(/\/t\/[0-9A-Z]+/);
   await expect(m.getByText("You're trying to reach")).toBeVisible();
-  await m.getByLabel(/I'm a person, not a bot/).check();
-  await m.getByRole("button", { name: "Continue" }).click();
+  await passHumanCheck(m);
   await expect(m.getByRole("heading", { name: "Group: Manzini Market" })).toBeVisible();
   // Tier 2 (the composer's default): the member confirms a code emailed to them.
   const t1 = Date.now() - 1000;
@@ -100,7 +99,7 @@ test("Groups: numbers are refused, contact codes are shared, and tapping one ope
 test("No phone number needed: sign up by email, create a code, and be reached by message or in-app call only", async ({ page, browser }) => {
   await page.goto("/signup");
   await emailSignUp(page);
-  await expect(page.getByRole("heading", { name: "My codes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your codes" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add a phone number" })).toBeVisible();   // optional, not required
   const { link } = await createToken(page, { context: "Business", tier: 1, label: "Hair braiding", number: false });
   await expect(page.getByLabel("Show my number (optional)")).toHaveCount(0);
@@ -154,6 +153,7 @@ test("Find a group, ask to join, and a code shared in a chat opens the gate for 
   await c.page.getByRole("button", { name: "Send" }).click();
   await page.goto("/chats");
   await page.getByRole("link", { name: `@${c.handle}` }).click();
+  await page.getByRole("button", { name: "Attach a photo or your contact code" }).click();
   await page.getByTestId("chat-share-code").click();
   await expect(page.getByTestId("share-code-panel")).toBeVisible();
   await page.getByLabel("Message").fill("Ask my partner, she has them:");

@@ -3,7 +3,7 @@
 Branch `redesign-0.12`, one commit on top of `ca3d490`. Typecheck and `next build` clean;
 180 of 183 tests pass (the 3 failures already fail on `main`, see "Not done yet", C1).
 Migration `drizzle/0018_uploads.sql` adds the `uploads` table and runs automatically on start.
-Instructions for an agent to apply this patch and push it: `docs/AGENT-PATCH-0.12.md`.
+Agent instructions for the latest patch: `docs/AGENT-PATCH-0.12.1.md`.
 
 ## What changed
 
@@ -81,3 +81,28 @@ C10. **Smaller items.**
 - `GET /api/numbers`: replace the per-number count loop with one grouped query.
 - Media seeking: support `Range` requests in `uploads/[file]`.
 - Update `docs/SECURITY_REVIEW.md` and `docs/THREAT_MODEL.md` for uploads, link preview, calls, reactions, stories.
+
+---
+
+# 0.12.1 — the redesigned screens
+
+One commit on top of 0.12. The four main phone screens now follow the design canvas.
+
+| Screen | Change | Files |
+| --- | --- | --- |
+| Home (My codes) | "N people want to reach you" banner; each live code as a dark pass card (name, level, what it means, `XXXX-•••••`, who reached you, number or not, expiry) with Pause/Resume, Replace and Activity, plus Extend and Revoke under "…"; big "Share a new code" button; weekly numbers, recent activity and old codes below; "Revoke all codes" moved to a "Feel unsafe?" box at the bottom | `src/app/dashboard/DashboardClient.tsx` |
+| Requests | Waiting/Decided tabs with a count; cards with chips for email verified, passkey or authenticator, account age, country, reports and earlier requests; Approve / Decline / more (show number once, decline and block); every decision can be undone for 5 seconds | `src/app/dashboard/requests/page.tsx`, `src/app/api/requests/route.ts` (adds `emailVerified`, `passkey`, `authenticator`, `avatar`) |
+| Chat | Header with back, initials, "via your X code · numbers hidden", call button and a menu (safety number, report, block); disappearing-messages strip; navy outgoing bubbles; view-once photo as a tile; "Location and camera details removed" under photos uploaded since 0.12; calls show "IP addresses hidden"; data-light toggle (media loads on tap; remembered per browser, on by default with Save-Data); one "+" for photo, view once and contact code | `src/app/chats/[id]/page.tsx`, `src/lib/chat.ts` (adds `metadataRemoved`) |
+| Caller screen | Dark "You're trying to reach" pass; horizontal step bar; large code box; gradient Confirm button; "No need to wait here" note | `src/components/Gate.tsx`, `src/i18n/index.ts` |
+
+Styles for all four are in the "0.12.1" block at the end of `src/app/globals.css`.
+
+Checks: typecheck and `next build` clean; unit + integration 180 passed, 3 failed (the same 3 as before);
+browser tests 13 of 14 pass. The one left, "Groups: numbers are refused, contact codes are shared…",
+expects a code card under group posts, which 0.11 replaced with the "Message / Call @handle" menu — the test
+needs updating, the app is unchanged there. Browser-test helpers now handle the gate continuing by itself
+after the human check (also a 0.11 change), and `tests/screens/redesign-0.12.spec.ts` captures phone
+screenshots of the four screens.
+
+Not in 0.12.1: passkey/authenticator buttons on the caller screen (needs server support first), and
+changing the disappearing-messages time from the chat.

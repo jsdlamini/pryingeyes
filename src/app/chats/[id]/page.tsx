@@ -1,5 +1,6 @@
 "use client";
 import { use, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api, errMsg, clock } from "@/components/api";
 import { KindPicker, MessageText, type CodeKind } from "@/components/Social";
 import { uploadAudio, uploadImage } from "@/components/upload";
@@ -16,12 +17,28 @@ const callLine = (c: { status: string; durationSec: number }, role?: string) => 
   return "Call failed";
 };
 
-type Msg = { id: string; mine: boolean; at: string; text: string; read: boolean; expiresAt: string | null; attachment: string | null; attachmentKind: string | null; viewOnce: boolean; reactions: { emoji: string; count: number; mine: boolean }[] };
+type Msg = { id: string; mine: boolean; at: string; text: string; read: boolean; expiresAt: string | null; attachment: string | null; attachmentKind: string | null; viewOnce: boolean; metadataRemoved?: boolean; reactions: { emoji: string; count: number; mine: boolean }[] };
 
 function ViewOnce({ src, onConsume }: { src: string; onConsume: () => void }) {
   const [shown, setShown] = useState(false);
   if (shown) return <img src={src} alt="" className="msg-attach" />;
-  return <button type="button" className="viewonce" onClick={() => { setShown(true); onConsume(); }}><Icon name="eye" size={15} /> View once</button>;
+  return (
+    <button type="button" className="viewonce-tile" onClick={() => { setShown(true); onConsume(); }}>
+      <Icon name="eye" size={26} /><b>Photo · view once</b><small>Tap to open. It&apos;s deleted after.</small>
+    </button>
+  );
+}
+
+/** Photos and voice notes that wait for a tap in data-light mode. */
+function Media({ m, light, onConsume }: { m: Msg; light: boolean; onConsume: () => void }) {
+  const [load, setLoad] = useState(false);
+  const a = m.attachment!;
+  const kind = m.attachmentKind === "voice" ? "voice note" : /\.(mp4|mov|m4v)$/.test(a) ? "video" : "photo";
+  if (m.viewOnce && !m.mine) return <ViewOnce src={a} onConsume={onConsume} />;
+  if (light && !m.mine && !load) return <button type="button" className="tap-load" onClick={() => setLoad(true)}><Icon name="download" size={16} />Tap to load {kind}</button>;
+  if (kind === "voice note") return <audio controls src={a} preload="metadata" className="voice-note" />;
+  if (kind === "video") return <video controls src={a} className="msg-attach video" preload="metadata" />;
+  return <img src={a} alt="" className="msg-attach" loading="lazy" />;
 }
 
 export default function Conversation({ params }: { params: Promise<{ id: string }> }) {
@@ -38,6 +55,18 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
   const [safety, setSafety] = useState(""); const [safetyOpen, setSafetyOpen] = useState(false);
   const [picked, setPicked] = useState<string[]>([]); const [reason, setReason] = useState("harassment"); const [details, setDetails] = useState("");
   const box = useRef<HTMLDivElement>(null);
+  // Data-light: photos, voice notes and videos from the other person load only when tapped.
+  const [light, setLight] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pe-data-light");
+      const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+      setLight(saved ? saved === "on" : !!saveData);
+    } catch { /* storage blocked: default off */ }
+  }, []);
+  const toggleLight = () => setLight((v) => { try { localStorage.setItem("pe-data-light", v ? "off" : "on"); } catch { /* ignore */ } return !v; });
+  const [menu, setMenu] = useState(false);
+  const [tray, setTray] = useState(false);
   const [recording, setRecording] = useState(false); const [recTime, setRecTime] = useState(0); const [viewOnce, setViewOnce] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const fileRef = useRef<HTMLInputElement>(null);
   // Polling: every 3 s only messages newer than the last one we have (much less to decrypt and send);
@@ -126,16 +155,30 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
   }
   return (
     <div className="page" style={{ maxWidth: 760 }}>
-      {conv && <div className="spread"><div><h1 style={{ marginBottom: 0 }}>@{conv.with}</h1><p className="muted small">About “{conv.label}”{conv.disappearSeconds ? " · messages disappear after 24 hours" : ""}</p></div>
-        <div className="row">{callOpt?.canStart && !conv.blocked && <>
-          <button className="btn accent sm" onClick={startCall} disabled={calling}><Icon name="headset" size={16} />{conv.role === "owner" ? "Call back" : "Call in the app"}</button></>}<button className="iconbtn danger" onClick={block} disabled={conv.blocked} aria-label={conv.blocked ? "Blocked" : "Block"} title={conv.blocked ? "Blocked" : "Block"}><Icon name="block" size={18} /></button><button className="iconbtn" onClick={() => setReporting(!reporting)} aria-label="Report" title="Report" aria-pressed={reporting}><Icon name="flag" size={18} /></button><button className="iconbtn" onClick={verify} aria-label="Verify identity" title="Verify identity" aria-pressed={safetyOpen}><Icon name="shield" size={18} /></button></div></div>}
-      {conv && <div className="privacy-note" style={{ marginTop: 10 }}><Icon name="lock" size={16} /><span>
-        {conv.role === "owner"
-          ? <>@{conv.with} reached you through your link “{conv.label}”. They can't see your number, and you can't see theirs. Either of you can start a call now. If you have PryingEyes open it rings here; if not, you'll get a missed-call notification and can reply in this chat.</>
-          : callOpt?.canStart
-            ? <>Messages are encrypted and no numbers are shared. Want to talk? <b>Call in the app</b> rings @{conv.with} over the internet, with no phone numbers involved. If they're not in the app, they'll see a missed call.</>
-            : <>Messages are encrypted and no numbers are shared.{callOpt?.reason === "pass_gate_again" ? " To call, open the owner's link again — calls need a fresh check and the owner's link must allow them." : ""}</>}
-      </span></div>}
+      {conv && (
+        <header className="chat-head">
+          <Link href="/chats" className="iconbtn plain" aria-label="Back to chats"><Icon name="arrow" size={20} className="icon flip" /></Link>
+          <span className="req-ava" style={{ width: 40, height: 40 }} aria-hidden="true">{conv.with.slice(0, 2)}</span>
+          <span className="who"><b>@{conv.with}</b><span>{conv.role === "owner" ? `via your ${conv.label} code` : `about “${conv.label}”`} · numbers hidden</span></span>
+          {callOpt?.canStart && !conv.blocked && (
+            <button className="chat-call" onClick={startCall} disabled={calling} aria-label={conv.role === "owner" ? "Call back in the app" : "Call in the app"} title="Call in the app"><Icon name="call" size={20} /></button>
+          )}
+          <span style={{ position: "relative" }}>
+            <button className="iconbtn plain" aria-expanded={menu} aria-haspopup="true" aria-label="Chat options: safety number, report, block" onClick={() => setMenu(!menu)}><Icon name="more" size={20} /></button>
+            {menu && (
+              <div className="pop menu-list" style={{ right: 0, left: "auto" }}>
+                <button className="plain-item" onClick={() => { setMenu(false); void verify(); }}><Icon name="shield" size={15} />Check safety number</button>
+                <button className="plain-item" onClick={() => { setMenu(false); setReporting(true); }}><Icon name="flag" size={15} />Report</button>
+                <button className="plain-item danger" onClick={() => { setMenu(false); void block(); }} disabled={conv.blocked}><Icon name="block" size={15} />{conv.blocked ? "Blocked" : "Block"}</button>
+              </div>
+            )}
+          </span>
+        </header>
+      )}
+      {conv && (conv.disappearSeconds
+        ? <div className="timer-strip"><Icon name="clock" size={18} /><span>Messages disappear after <b>{conv.disappearSeconds >= 86400 ? `${Math.round(conv.disappearSeconds / 86400)} day${conv.disappearSeconds >= 172800 ? "s" : ""}` : `${Math.round(conv.disappearSeconds / 3600)} hours`}</b></span></div>
+        : <div className="timer-strip plain"><Icon name="lock" size={18} /><span>Encrypted. No phone numbers on either side{callOpt?.canStart ? " — calls go through the app, too" : ""}.</span></div>)}
+      {conv && !callOpt?.canStart && callOpt?.reason === "pass_gate_again" && <p className="small muted" style={{ margin: "8px 2px 0" }}>To call, open the owner&apos;s link again — calls need a fresh check.</p>}
       {safetyOpen && <div className="card" style={{ marginTop: 10 }}><p className="muted small" style={{ margin: "0 0 6px" }}>Compare this safety number with @{conv.with} to confirm no one is in the middle.</p><div className="safety-num">{safety || "Loading…"}</div></div>}
       {err && <div className="alert err" role="alert">{err}</div>}
       {reporting && <form className="card stack" onSubmit={report}>
@@ -151,14 +194,14 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
           {[...msgs.map((m) => ({ kind: "msg" as const, at: m.at, m })), ...calls.map((c) => ({ kind: "call" as const, at: c.at, c }))]
             .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
             .map((it) => it.kind === "call" ? (
-              <div key={it.c.id} className={`callevent${(it.c.status === "missed" || it.c.status === "cancelled" || it.c.status === "busy") ? " missed" : ""}`}>{callLine(it.c, conv?.role)} · {clock(it.c.at)}</div>
+              <div key={it.c.id} className={`callevent${(it.c.status === "missed" || it.c.status === "cancelled" || it.c.status === "busy") ? " missed" : ""}`}><Icon name="call" size={14} />{callLine(it.c, conv?.role)}{it.c.status === "ended" ? " · IP addresses hidden" : ""} · {clock(it.c.at)}</div>
             ) : ((m) => (
             <div key={m.id} style={{ display: "flex", alignItems: "flex-end", gap: 6, flexDirection: m.mine ? "row-reverse" : "row" }}>
               {reporting && <input type="checkbox" aria-label="Include in report" checked={picked.includes(m.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, m.id] : picked.filter((x) => x !== m.id))} />}
               <div className={`bubble ${m.mine ? "mine" : "theirs"}`}>
                 <MessageText text={m.text} mine={m.mine} />
-                {m.attachmentKind === "voice" && m.attachment ? <audio controls src={m.attachment} preload="metadata" className="voice-note" /> : null}
-                {m.attachmentKind !== "voice" && m.attachment ? (m.viewOnce && !m.mine ? <ViewOnce src={m.attachment} onConsume={() => api(`/api/chats/${id}/messages/${m.id}/consume`, { method: "POST" }).catch(() => {})} /> : /\.(mp4|mov|m4v)$/.test(m.attachment) ? <video controls src={m.attachment} className="msg-attach video" preload="metadata" /> : <img src={m.attachment} alt="" className="msg-attach" loading="lazy" />) : null}
+                {m.attachment ? <Media m={m} light={light} onConsume={() => api(`/api/chats/${id}/messages/${m.id}/consume`, { method: "POST" }).catch(() => {})} /> : null}
+                {m.attachment && m.attachmentKind !== "voice" && m.metadataRemoved && <div className="media-safe"><Icon name="shield" size={13} />Location and camera details removed</div>}
                 <ReactionBar kind="message" targetId={m.id} initial={m.reactions} />
                 <div className="tiny" style={{ opacity: .7, marginTop: 2 }}>{clock(m.at)}{m.mine && m.read ? " · read" : ""}</div>
               </div>
@@ -172,14 +215,23 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
             <KindPicker kind={kind} setKind={setKind} />
           </div>
         )}
+        <button type="button" className="datalight" aria-pressed={light} onClick={toggleLight} title="Photos, voice notes and videos load only when you tap them">
+          <Icon name="download" size={14} />{light ? "Data-light on · media loads when tapped" : "Data-light off"}</button>
+        {tray && !conv?.blocked && (
+          <div className="attach-tray">
+            <button type="button" className="chip" aria-pressed={sharing} onClick={() => { setSharing(!sharing); setTray(false); }} data-testid="chat-share-code"><Icon name="mark" size={16} />Share my contact code</button>
+            <button type="button" className="chip" onClick={() => { fileRef.current?.click(); setTray(false); }}><Icon name="image" size={16} />{viewOnce ? "Send a view-once photo" : "Send a photo"}</button>
+            <button type="button" className="chip" aria-pressed={viewOnce} onClick={() => setViewOnce(!viewOnce)}><Icon name={viewOnce ? "eye" : "eyeOff"} size={16} />View once: {viewOnce ? "on" : "off"}</button>
+          </div>
+        )}
         <form onSubmit={send} className="chatbar">
-          <button type="button" className="plus" aria-pressed={sharing} onClick={() => setSharing(!sharing)} disabled={conv?.blocked} data-testid="chat-share-code" title="Share my contact code"><Icon name="mark" size={19} /><span className="sr-only">Share my contact code</span></button>
+          <button type="button" className="plus" aria-expanded={tray} onClick={() => setTray(!tray)} disabled={conv?.blocked} aria-label="Attach a photo or your contact code" title="Attach"><Icon name={tray ? "x" : "plus"} size={19} /></button>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickImage} />
-          <button type="button" className="plus" onClick={() => fileRef.current?.click()} disabled={conv?.blocked} title={viewOnce ? "Send a view-once photo" : "Send a photo"}><Icon name="image" size={19} /><span className="sr-only">Send a photo</span></button>
-          <button type="button" className="plus" onClick={() => setViewOnce(!viewOnce)} aria-pressed={viewOnce} disabled={conv?.blocked} title={viewOnce ? "View once: on" : "View once: off"}><Icon name={viewOnce ? "eye" : "eyeOff"} size={19} /><span className="sr-only">View once</span></button>
-          <button type="button" className={`plus${recording ? " recording" : ""}`} onClick={recording ? stopVoice : startVoice} disabled={conv?.blocked} title={recording ? "Stop recording" : "Record a voice note"} aria-pressed={recording}>{recording ? <><span className="rec-dot" />{recTime}s</> : <Icon name="mic" size={19} />}<span className="sr-only">Voice note</span></button>
           <label htmlFor="msg" className="sr-only">Message</label>
-          <input id="msg" type="text" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} placeholder={conv?.blocked ? "This conversation is blocked" : "Type a message here…"} disabled={conv?.blocked} />
+          <input id="msg" type="text" maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} placeholder={conv?.blocked ? "This conversation is blocked" : "Message"} disabled={conv?.blocked} />
+          {text.trim() || sharing
+            ? null
+            : <button type="button" className={`plus${recording ? " recording" : ""}`} onClick={recording ? stopVoice : startVoice} disabled={conv?.blocked} title={recording ? "Stop recording" : "Record a voice note"} aria-pressed={recording}>{recording ? <><span className="rec-dot" />{recTime}s</> : <Icon name="mic" size={19} />}<span className="sr-only">Voice note</span></button>}
           <button className="sendbtn" disabled={(!text.trim() && !sharing) || conv?.blocked} aria-label="Send" title="Send"><Icon name="send" size={24} /></button>
         </form>
       </div>

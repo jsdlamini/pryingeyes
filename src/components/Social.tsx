@@ -197,7 +197,7 @@ const TIER_HELP: Record<number, string> = { 1: "Anyone verified can message or c
 
 /** Post box with "Attach my contact code". Phone numbers in the text are refused with an explanation. */
 export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeholder: string; onPost: (b: { text: string; attach: { tier: number; kind: CodeKind } | null; attachment: string | null }) => Promise<unknown>; buttonLabel?: string }) {
-  const [text, setText] = useState(""); const [attach, setAttach] = useState(() => { try { return localStorage.getItem("pe-share-code") !== "off"; } catch { return true; } }); const [tier, setTier] = useState(2); const [kind, setKind] = useState<CodeKind>("standard");
+  const [text, setText] = useState(""); const [attach, setAttach] = useState(true); const [tier, setTier] = useState(2); const [kind, setKind] = useState<CodeKind>("standard");
   const [codeWarned, setCodeWarned] = useState(() => { try { return localStorage.getItem("pe-code-warned") === "1"; } catch { return false; } });
   const [warnShow, setWarnShow] = useState(false);
   useEffect(() => {
@@ -211,6 +211,11 @@ export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeh
   const [voice, setVoice] = useState<string | null>(null);
   const vr = useVoiceRecorder();
   useEffect(() => {
+    let alive = true;
+    api("/api/me").then((r) => { if (alive && typeof r.user?.shareCodeByDefault === "boolean") setAttach(r.user.shareCodeByDefault); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
     if (!vr.blob) return;
     setErr("");
     uploadAudio(vr.blob).then((url) => { setVoice(url); setImg(null); }).catch((e) => setErr(e instanceof Error ? e.message : "Couldn't record that voice note."));
@@ -222,7 +227,7 @@ export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeh
   }
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setErr(""); setBlocked(false);
-    try { await onPost({ text, attach: attach ? { tier, kind } : null, attachment: voice ?? img }); setText(""); setKind("standard"); setImg(null); setVoice(null); vr.reset(); try { localStorage.setItem("pe-code-warned", "1"); setAttach(localStorage.getItem("pe-share-code") !== "off"); } catch { /* ignore */ } }
+    try { await onPost({ text, attach: attach ? { tier, kind } : null, attachment: voice ?? img }); setText(""); setKind("standard"); setImg(null); setVoice(null); vr.reset(); try { localStorage.setItem("pe-code-warned", "1"); } catch { /* ignore */ } }
     catch (x) { setErr(errMsg(x)); if (x instanceof ApiError && x.code === "contact_info_detected") { setBlocked(true); setAttach(true); } }
     finally { setBusy(false); }
   }
@@ -258,7 +263,7 @@ export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeh
         <button type="button" className={`attach ${img ? "on" : ""}`} aria-pressed={!!img} onClick={() => fileRef.current?.click()} disabled={imgBusy} data-testid="attach-image">
           <Icon name="image" size={16} /> {imgBusy ? "Uploading…" : img ? "Media attached" : "Add photo/video"}
         </button>
-        <button type="button" className={`attach ${attach ? "on" : ""}`} aria-pressed={attach} onClick={() => { const n = !attach; setAttach(n); try { localStorage.setItem("pe-share-code", n ? "on" : "off"); } catch { /* ignore */ } }} data-testid="attach-code">
+        <button type="button" className={`attach ${attach ? "on" : ""}`} aria-pressed={attach} onClick={() => setAttach(!attach)} data-testid="attach-code">
           <Icon name="mark" size={16} /> {attach ? "Contact code attached" : "Attach my contact code"}
         </button>
         <button className="sendbtn" disabled={busy || (!text.trim() && !attach && !img && !voice)} data-testid="composer-send" aria-label={buttonLabel} title={buttonLabel}><Icon name="send" size={22} /></button>

@@ -85,6 +85,7 @@ export default function Settings() {
             <p className="hint">It's both a safety record and data about the people who contacted you.</p></div>
           <label className="check"><input type="checkbox" checked={u.readReceipts} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { readReceipts: e.target.checked } }), "Saved.")} /> Send read receipts in chats</label>
           <label className="check"><input type="checkbox" checked={u.doNotDisturb} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { doNotDisturb: e.target.checked } }), "Saved.")} /> Do not disturb for calls</label>
+          <label className="check"><input type="checkbox" checked={u.shareCodeByDefault} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { shareCodeByDefault: e.target.checked } }), "Saved.")} /> Share my contact code by default on new posts</label>
         </div>
         <div className="row">
           <button className="btn ghost sm" onClick={() => run(async () => {

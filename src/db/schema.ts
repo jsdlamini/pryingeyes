@@ -52,6 +52,7 @@ export const users = pgTable("users", {
   readReceipts: boolean("read_receipts").notNull().default(true),
   doNotDisturb: boolean("do_not_disturb").notNull().default(false),
   avatarUrl: text("avatar_url"),
+  shareCodeByDefault: boolean("share_code_by_default").notNull().default(true),
   panicAt: timestamp("panic_at", { withTimezone: true }),
   totpLastStep: bigint("totp_last_step", { mode: "number" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

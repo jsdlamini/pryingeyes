@@ -1,38 +1,11 @@
-# PryingEyes 0.12 — instructions for a coding agent
+# PryingEyes 0.12 — release notes
 
-You are updating the PryingEyes web app (Next.js 15, React 19, Drizzle, PGlite/PostgreSQL, Redis) to
-version 0.12. Part of the work is already done on the `redesign-0.12` branch (or in
-`pryingeyes-0.12.patch`). Your job: apply it, verify it, then do the remaining tasks in Part C in order.
+Branch `redesign-0.12`, one commit on top of `ca3d490`. Typecheck and `next build` clean;
+180 of 183 tests pass (the 3 failures already fail on `main`, see "Not done yet", C1).
+Migration `drizzle/0018_uploads.sql` adds the `uploads` table and runs automatically on start.
+Instructions for an agent to apply this patch and push it: `docs/AGENT-PATCH-0.12.md`.
 
-Ground rules:
-
-- Never send anything to a user's phone number. One-time codes and notices go by **email**, in-app
-  notifications, web push, passkey or authenticator — not SMS. There is no SMS path in the code; keep it that way.
-- Codes are stored as HMACs only. No screen may claim to show an existing code again; "share" always
-  mints a new code (see `mintShareCode`, `TokenShare`).
-- Every change ships with a test in `tests/integration` (or `tests/unit`). Run the suite before and after.
-- Keep the house style: route handlers wrapped in `route()`, input parsed with zod via `readJson`,
-  errors via `lib/errors`, user-facing copy in plain words (no "tier", "token", "relay", "grant").
-- Do not commit `.bak` files. Do not push to `main`; open a pull request from your branch.
-
-## Part A — apply and check the work already done
-
-```bash
-git checkout -b redesign-0.12            # or: git checkout redesign-0.12 if the branch exists
-git am pryingeyes-0.12.patch             # skip if the branch already has the commit
-npm ci
-npm run typecheck
-TEST_DATABASE_URL=embedded TEST_REDIS_URL=memory npx vitest run
-npx next build
-```
-
-Expected: typecheck and build clean; **180 passed, 3 failed**. The 3 failures are pre-existing on `main`
-(see C1), not caused by this patch. `tests/integration/uploads.test.ts` (7 tests) must pass.
-
-Migration `drizzle/0018_uploads.sql` adds the `uploads` table. It runs automatically on start
-(`scripts/prepare.mjs`) or with `npm run db:migrate`.
-
-### What the patch changes
+## What changed
 
 | Area | Files | Change |
 | --- | --- | --- |
@@ -51,7 +24,7 @@ Migration `drizzle/0018_uploads.sql` adds the `uploads` table. It runs automatic
 | Look | `globals.css` | Pop colours (coral, amber, lime, violet), code-pass styles, nav badge and current-tab bar, `prefers-reduced-motion`. |
 | Hygiene | 13 `*.bak*` files | Removed from git. |
 
-## Part B — manual checks after deploying to staging
+## Manual checks after deploying
 
 1. Upload a phone photo with location on. Download it from the chat; run `exiftool` on it — no GPS, no camera fields.
 2. Copy a chat photo URL into a private window → 404. Signed in as a third account → 404.
@@ -62,7 +35,7 @@ Migration `drizzle/0018_uploads.sql` adds the `uploads` table. It runs automatic
 7. **Mobile app:** `/uploads/*` now needs auth. The phone app (not in this repo) must send its bearer
    token when loading images and audio (e.g. React Native `<Image source={{ uri, headers: { Authorization: `Bearer ${token}`, "X-PE-Client": "mobile", "X-PE-Device": device } }} />`). Until it does, media won't load in the app.
 
-## Part C — remaining tasks, in order
+## Not done yet (for a later release)
 
 C1. **Stale tests.** `calls.test.ts` and `contact.test.ts` expect the owner can't start a call from a chat,
 but 0.11 allows it (`callOptionFor` returns `canStart: true, chatCall: true`). Decide with the product
@@ -108,6 +81,3 @@ C10. **Smaller items.**
 - `GET /api/numbers`: replace the per-number count loop with one grouped query.
 - Media seeking: support `Range` requests in `uploads/[file]`.
 - Update `docs/SECURITY_REVIEW.md` and `docs/THREAT_MODEL.md` for uploads, link preview, calls, reactions, stories.
-
-When you finish each task: run typecheck, the full suite and `next build`, then write one line per task
-in `docs/RELEASE-0.12.md` (what changed, which test covers it).

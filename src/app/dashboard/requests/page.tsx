@@ -23,7 +23,7 @@ export default function Requests() {
     <div className="page" style={{ maxWidth: 860 }}>
       <h1>Requests</h1>
       {err && <div className="alert err" role="alert">{err}</div>}
-      {!rs ? <p>Loading…</p> : pending.length === 0 ? <div className="card muted">No one is waiting. Tier 3 requests appear here.</div> : pending.map((r) => (
+      {!rs ? <p>Loading…</p> : pending.length === 0 ? <div className="card muted">No one is waiting. People reaching your “Ask me” codes appear here.</div> : pending.map((r) => (
         <div className="card" key={r.id} data-testid="request-card">
           <div className="spread"><div><span className="muted small">Request · {r.label}</span><h2 style={{ margin: 0 }}>@{r.caller.handle} wants to reach you</h2></div>
             <span className="status pending">Expires {relTime(r.consentExpiresAt)}</span></div>

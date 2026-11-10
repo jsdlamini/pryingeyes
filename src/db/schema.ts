@@ -259,6 +259,15 @@ export const reactions = pgTable("reactions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("reaction_uq").on(t.userId, t.kind, t.targetId, t.emoji)]);
 
+/** Uploaded media files. The file itself lives in the uploads folder as `<id>.<ext>`. */
+export const uploads = pgTable("uploads", {
+  id: uuid("id").primaryKey(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  ext: text("ext").notNull(),
+  size: integer("size").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("uploads_owner_idx").on(t.ownerId)]);
+
 export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),

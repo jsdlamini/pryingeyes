@@ -15,7 +15,7 @@ RUN npx next build
 FROM node:22-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app
-RUN useradd --system --uid 10001 app && mkdir -p var/data var/anchors var/log && chown -R app var
+RUN useradd --system --uid 10001 app && mkdir -p var/data var/anchors var/log var/uploads && chown -R app var
 COPY --from=build --chown=app /app ./
 USER app
 EXPOSE 3000

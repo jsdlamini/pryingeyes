@@ -20,6 +20,8 @@ const schema = z.object({
   REDIS_URL: z.string().default(""),
   // Where the built-in database keeps its files (and other runtime data).
   DATA_DIR: z.string().default("./var/data"),
+  // Where uploaded photos and voice notes are kept. Empty = "uploads" next to DATA_DIR (./var/uploads; /app/var/uploads in Docker).
+  UPLOAD_DIR: z.string().default(""),
   // Verified accounts with these emails become admins automatically (comma-separated).
   ADMIN_EMAILS: z.string().default(""),
   // on = the website runs the housekeeping jobs itself; off = run `npm run jobs` separately.

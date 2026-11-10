@@ -5,7 +5,7 @@ import { api, errMsg } from "@/components/api";
 import { passkeysSupported, authenticateWithPasskey } from "@/components/passkey";
 import { Icon } from "@/components/Icon";
 
-const nextUrl = () => { const n = new URLSearchParams(window.location.search).get("next"); return n?.startsWith("/") && !n.startsWith("//") ? n : "/groups"; };
+const nextUrl = () => { const n = new URLSearchParams(window.location.search).get("next"); return n?.startsWith("/") && !n.startsWith("//") ? n : "/dashboard"; };
 function after(status: string) {
   window.location.href = status === "mfa_required" ? `/login/mfa?next=${encodeURIComponent(nextUrl())}` : nextUrl();
 }

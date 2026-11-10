@@ -2,15 +2,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, errMsg } from "@/components/api";
-import { Tier } from "@/components/Tier";
+import { Tier, TIER_LINES } from "@/components/Tier";
 import { TokenShare } from "@/components/TokenShare";
 
 const CONTEXTS = [["business", "Business"], ["classifieds", "Classifieds"], ["community", "Community group"], ["marketplace", "Marketplace"], ["dating", "Dating"], ["new_contact", "Someone new"], ["other", "Other"]] as const;
-const TIERS = [
-  { n: 1, p: "Anyone with a verified account can message or call you in the app." },
-  { n: 2, p: "They also confirm a code sent to their email, with a daily limit." },
-  { n: 3, p: "You approve each person before they can reach you." },
-];
+const TIERS = [1, 2, 3].map((n) => ({ n, p: TIER_LINES[n] }));
 const DURATIONS = [["standard", null, "Until I switch it off"], ["expiring", 24, "24 hours"], ["expiring", 48, "48 hours"], ["expiring", 168, "7 days"], ["disposable", null, "One person only"]] as const;
 type Num = { id: string; label: string; hint: string; activeTokens: number };
 
@@ -18,6 +14,7 @@ type Num = { id: string; label: string; hint: string; activeTokens: number };
 export default function NewCode() {
   const [ctx, setCtx] = useState<string>("marketplace");
   const [rec, setRec] = useState<number | null>(null);
+  const [saved, setSaved] = useState(false);
   const [label, setLabel] = useState(""); const [tier, setTier] = useState(2); const [dur, setDur] = useState(0);
   const [numbers, setNumbers] = useState<Num[]>([]); const [numberId, setNumberId] = useState("");
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
@@ -42,8 +39,12 @@ export default function NewCode() {
   if (made) return (
     <div className="page" style={{ maxWidth: 820 }}>
       <h1>Ready to share</h1>
-      <div className="card"><TokenShare {...made} /></div>
-      <div className="row" style={{ marginTop: 14 }}><Link className="btn" href="/dashboard">Back to my codes</Link><button className="btn ghost" onClick={() => { setMade(null); setLabel(""); }}>Create another</button></div>
+      <div className="card"><TokenShare {...made} onSavedChange={setSaved} /></div>
+      <div className="row" style={{ marginTop: 14 }}>
+        {saved ? <Link className="btn" href="/dashboard">Done</Link> : <button className="btn" disabled aria-describedby="done-hint">Done</button>}
+        <button className="btn ghost" disabled={!saved} onClick={() => { setMade(null); setLabel(""); setSaved(false); }}>Create another</button>
+      </div>
+      {!saved && <p id="done-hint" className="muted small" style={{ marginTop: 6 }}>Copy, share or save the code to continue.</p>}
     </div>
   );
   return (

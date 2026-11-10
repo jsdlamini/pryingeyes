@@ -1,13 +1,8 @@
 import { route, json } from "@/lib/http";
 import { requireUser } from "@/lib/auth";
-
-function blocked(host: string): boolean {
-  if (host === "localhost" || host === "0.0.0.0" || host.endsWith(".local")) return true;
-  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host)) return true;
-  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) return true;
-  if (host === "169.254.169.254") return true; // cloud metadata
-  return false;
-}
+import { hit } from "@/lib/ratelimit";
+import { tooMany } from "@/lib/errors";
+import { safeFetchHtml, UnsafeTarget } from "@/lib/safe-fetch";
 
 function og(html: string, prop: string): string | null {
   const re = new RegExp(
@@ -19,25 +14,30 @@ function og(html: string, prop: string): string | null {
   return m ? (m[1] ?? m[2]) : null;
 }
 
+/** Title and description of a pasted link. Inside addresses are refused (see lib/safe-fetch). */
 export const GET = route(async (req) => {
-  await requireUser(req);
+  const ctx = await requireUser(req);
+  const b = await hit(`linkpreview:${ctx.user.id}`, 60, 3600);
+  if (!b.allowed) throw tooMany(b.retryAfter, "Too many link previews. Try again later.");
   const raw = new URL(req.url).searchParams.get("url") ?? "";
   let u: URL;
   try { u = new URL(raw); } catch { return json({ error: "invalid_url" }, 400); }
   if (!["http:", "https:"].includes(u.protocol)) return json({ error: "invalid_url" }, 400);
-  if (blocked(u.hostname)) return json({ error: "blocked" }, 400);
+  const empty = { url: u.toString(), host: u.host, title: null, image: null, description: null };
 
   try {
-    const res = await fetch(u.toString(), { headers: { "User-Agent": "Mozilla/5.0 PryingEyes/1.0" }, signal: AbortSignal.timeout(4000), redirect: "follow" });
-    const html = await res.text();
+    const res = await safeFetchHtml(u.toString());
+    const html = res.body;
     const title = og(html, "title") ?? (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ?? null);
+    const image = og(html, "image");
     return json({
-      url: u.toString(), host: u.host,
+      ...empty,
       title: title?.slice(0, 200) ?? null,
-      image: og(html, "image") ?? null,
+      image: image && /^https:\/\//i.test(image) ? image.slice(0, 500) : null,
       description: og(html, "description")?.slice(0, 300) ?? null,
     });
-  } catch {
-    return json({ url: u.toString(), host: u.host, title: null, image: null, description: null });
+  } catch (err) {
+    if (err instanceof UnsafeTarget) return json({ error: "blocked" }, 400);
+    return json(empty);
   }
 });

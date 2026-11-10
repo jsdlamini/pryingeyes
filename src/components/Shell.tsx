@@ -14,7 +14,7 @@ export async function Shell() {
     <>
       <header className="topbar">
         <div className="in">
-          <Link href={signedIn ? "/groups" : "/"} className="logo">
+          <Link href={signedIn ? "/dashboard" : "/"} className="logo">
             <span className="mark-badge"><Icon name="mark" size={19} /></span>
             <span>Prying<b>Eyes</b></span>
           </Link>

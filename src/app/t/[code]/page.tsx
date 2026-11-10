@@ -12,7 +12,7 @@ export default async function TokenPage({ params }: { params: Promise<{ code: st
   return (
     <div className="narrow">
       <OpenInApp path={`t/${code}`} downloadUrl={e.APP_DOWNLOAD_URL || null} />
-      <Gate code={decodeURIComponent(code)} signedIn={!!a && !a.session.mfaPending} handle={a?.user.handle ?? null}
+      <Gate code={decodeURIComponent(code)} signedIn={!!a && !a.session.mfaPending} handle={a?.user.handle ?? null} email={a?.user.email ?? null}
         captchaMode={e.CAPTCHA_PROVIDER} siteKey={e.TURNSTILE_SITE_KEY} />
     </div>
   );

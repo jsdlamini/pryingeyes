@@ -14,6 +14,7 @@ export async function resetAll() {
   await db().execute(sql.raw(`TRUNCATE ${TABLES.join(", ")} RESTART IDENTITY CASCADE`));
   await redis().flushdb();
   fs.rmSync(process.env.AUDIT_ANCHOR_DIR ?? "./var/test-anchors", { recursive: true, force: true });
+  fs.rmSync(process.env.UPLOAD_DIR ?? "./var/test-uploads", { recursive: true, force: true });
 }
 
 /** A synthetic Eswatini mobile number, generated at runtime. Never a stored real number. */

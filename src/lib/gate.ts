@@ -249,7 +249,8 @@ export async function decide(owner: AuthCtx, requestId: string, decision: Decisi
     await audit({ type, actorId: owner.user.id, ownerId: owner.user.id, subjectType: "request", subjectId: requestId }, tx);
   });
   if (stage.startsWith("approved")) {
-    await notify(r.callerId, { kind: "info", title: "Your request was accepted", body: "Open PryingEyes to continue.", link: `/r/${requestId}`, email: false });
+    // Also emailed, so the caller doesn't have to keep the gate page open while they wait.
+    await notify(r.callerId, { kind: "info", title: "Your request was accepted", body: "Open PryingEyes to continue.", link: `/r/${requestId}` });
   }
   return { stage };
 }

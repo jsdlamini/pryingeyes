@@ -24,6 +24,9 @@ export async function runRetention() {
   r.callsSettled = await sweepCalls(true);
   const { sweepStatuses } = await import("./social");
   r.statusesExpired = await sweepStatuses();
+  // Uploaded files that nothing refers to any more (deleted posts, replaced avatars, erased accounts).
+  const { sweepUploads } = await import("./uploads");
+  r.uploadsDeleted = await sweepUploads();
   // In-app call metadata (who, when, how long) is kept for 12 months.
   r.callsPurged = (await db().delete(schema.appCalls).where(lt(schema.appCalls.createdAt, daysAgo(365)))).rowCount ?? 0;
   r.otpPurged = (await db().delete(schema.otpChallenges).where(lt(schema.otpChallenges.createdAt, daysAgo(90)))).rowCount ?? 0;

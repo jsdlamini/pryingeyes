@@ -10,6 +10,7 @@ import { audit, erasePayloadsFor } from "./audit";
 import { decryptForUser, decryptNumberFor, forgetDataKey } from "./vault";
 import { listMessages } from "./chat";
 import { ownerFeed } from "./feed";
+import { deleteUpload, uploadsOf } from "./uploads";
 
 export async function exportData(userId: string) {
   const [u] = await db().select().from(schema.users).where(eq(schema.users.id, userId));
@@ -42,6 +43,7 @@ export async function exportData(userId: string) {
 export async function eraseAccount(userId: string) {
   // Record the erasure first (opaque ids only), then remove personal data.
   await audit({ type: "account.erased", actorId: userId, ownerId: userId });
+  const files = await uploadsOf(userId); // listed now: their records go with the account below
   await db().transaction(async (tx) => {
     // Reports the user filed or received keep their moderation value but lose the link to the person.
     await tx.update(schema.reports).set({ reporterId: null }).where(eq(schema.reports.reporterId, userId));
@@ -51,6 +53,7 @@ export async function eraseAccount(userId: string) {
   await erasePayloadsFor(userId);
   await db().delete(schema.devOutbox).where(eq(schema.devOutbox.userId, userId));
   forgetDataKey(userId);
+  for (const f of files) await deleteUpload(f);
 }
 
 export { and };

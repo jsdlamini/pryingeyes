@@ -1,7 +1,8 @@
 /**
  * In-app chat (rule 10). TLS in transit; messages AES-256-GCM encrypted at rest under a
  * per-conversation key derived from the owner's data key. No server-side content scanning.
- * Disappearing messages (24 h) on Tier 3. Attachments are not supported in Phase 1.
+ * Disappearing messages (24 h) on Tier 3. Photos and voice notes are uploads the sender owns
+ * (lib/uploads); a view-once photo's file is deleted when it is opened.
  */
 import crypto from "node:crypto";
 import { and, asc, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
@@ -15,6 +16,7 @@ import type { Token } from "./tokens";
 import { notify } from "./notify";
 import { redis } from "./redis";
 import { log } from "./log";
+import { deleteUpload, ownUpload } from "./uploads";
 
 const handleOf = async (id: string) =>
   (await db().select({ h: schema.users.handle }).from(schema.users).where(eq(schema.users.id, id)))[0]?.h ?? "someone";
@@ -90,12 +92,12 @@ export async function chatPartnerHandle(userId: string, convId: string) {
   return u?.h ?? "someone";
 }
 
-const MEDIA_RE = /^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg)$/;
+const CHAT_MEDIA = ["jpg", "png", "webp", "gif", "webm", "m4a", "mp3", "ogg"] as const;
 
 export async function sendMessage(userId: string, convId: string, text: string, opts: { attachment?: string | null; attachmentKind?: string | null; viewOnce?: boolean } = {}) {
   const c = await participantConv(userId, convId);
   const clean = (text ?? "").replace(/\u0000/g, "").trim();
-  const attachment = opts.attachment && MEDIA_RE.test(opts.attachment) ? opts.attachment : null;
+  const attachment = await ownUpload(userId, opts.attachment, CHAT_MEDIA);
   if (!clean && !attachment) throw badRequest("empty", "Write a message or attach something.");
   if (clean.length > 2000) throw badRequest("too_long", "Messages can be up to 2,000 characters.");
   if (c.closedAt) throw forbidden("closed", "This conversation is closed.");
@@ -127,6 +129,7 @@ export async function consumeMessage(userId: string, convId: string, messageId: 
   if (m.senderId === userId) return { consumed: false };
   if (!m.viewOnce || !m.attachment) return { consumed: false };
   await db().update(schema.messages).set({ attachment: null, viewOnce: false }).where(eq(schema.messages.id, messageId));
+  await deleteUpload(m.attachment); // the file goes too, not just the pointer to it
   return { consumed: true };
 }
 
@@ -191,8 +194,9 @@ export async function unblockUser(userId: string, otherId: string) {
 
 /** Retention job: delete expired disappearing messages. */
 export async function purgeExpiredMessages() {
-  const r = await db().delete(schema.messages).where(lt(schema.messages.expiresAt, new Date()));
-  return r.rowCount ?? 0;
+  const r = await db().delete(schema.messages).where(lt(schema.messages.expiresAt, new Date())).returning({ attachment: schema.messages.attachment });
+  for (const m of r) if (m.attachment) await deleteUpload(m.attachment);
+  return r.length;
 }
 
 /** Decrypts specific messages the reporter chose to attach (used only to build a report). */

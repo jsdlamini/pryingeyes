@@ -5,6 +5,7 @@ import { KindPicker, MessageText, type CodeKind } from "@/components/Social";
 import { uploadAudio, uploadImage } from "@/components/upload";
 import { ReactionBar } from "@/components/ReactionBar";
 import { Icon } from "@/components/Icon";
+import { TIER_NAMES } from "@/components/Tier";
 
 const callLine = (c: { status: string; durationSec: number }, role?: string) => {
   const d = c.durationSec ? ` · ${Math.floor(c.durationSec / 60)}:${String(c.durationSec % 60).padStart(2, "0")}` : "";
@@ -39,8 +40,28 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
   const box = useRef<HTMLDivElement>(null);
   const [recording, setRecording] = useState(false); const [recTime, setRecTime] = useState(0); const [viewOnce, setViewOnce] = useState(false);
   const recRef = useRef<MediaRecorder | null>(null); const chunksRef = useRef<Blob[]>([]); const fileRef = useRef<HTMLInputElement>(null);
-  const load = useCallback(() => api(`/api/chats/${id}/messages`).then((r) => { setConv(r.conversation); setMsgs(r.messages); setCalls(r.calls ?? []); setCallOpt(r.call ?? null); }).catch((e) => setErr(errMsg(e))), [id]);
-  useEffect(() => { load(); const t = setInterval(load, 3000); return () => clearInterval(t); }, [load]);
+  // Polling: every 3 s only messages newer than the last one we have (much less to decrypt and send);
+  // a full refresh every 30 s picks up reactions, read receipts and opened view-once photos.
+  // Nothing is fetched while the tab is hidden.
+  const lastAt = useRef<string | null>(null);
+  const load = useCallback((full = true) => {
+    const q = !full && lastAt.current ? `?after=${encodeURIComponent(lastAt.current)}` : "";
+    return api(`/api/chats/${id}/messages${q}`).then((r) => {
+      setConv(r.conversation); setCalls(r.calls ?? []); setCallOpt(r.call ?? null);
+      if (q) setMsgs((prev) => { const seen = new Set(prev.map((m) => m.id)); return [...prev, ...(r.messages as Msg[]).filter((m) => !seen.has(m.id))]; });
+      else setMsgs(r.messages);
+      const last = (r.messages as Msg[]).at(-1);
+      if (last) lastAt.current = String(last.at);
+    }).catch((e) => setErr(errMsg(e)));
+  }, [id]);
+  useEffect(() => {
+    lastAt.current = null; load();
+    let ticks = 0;
+    const t = setInterval(() => { if (document.visibilityState !== "visible") return; ticks++; load(ticks % 10 === 0); }, 3000);
+    const back = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", back);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", back); };
+  }, [load]);
   useEffect(() => { if (!recording) { setRecTime(0); return; } const id = setInterval(() => setRecTime((t) => t + 1), 1000); return () => clearInterval(id); }, [recording]);
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs.length]);
   async function send(e: React.FormEvent) {
@@ -147,7 +168,7 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
         {sharing && !conv?.blocked && (
           <div className="card stack small" style={{ marginTop: 10 }} data-testid="share-code-panel">
             <p className="muted" style={{ margin: 0 }}>Your message will include one of your contact codes. Whoever taps it reaches you through PryingEyes, without your number or email.</p>
-            <div className="chips">{[1, 2, 3].map((n) => <button type="button" key={n} className="chip" aria-pressed={tier === n} onClick={() => setTier(n)}>{["", "Open", "Verified", "Consent"][n]}</button>)}</div>
+            <div className="chips">{[1, 2, 3].map((n) => <button type="button" key={n} className="chip" aria-pressed={tier === n} onClick={() => setTier(n)}>{TIER_NAMES[n]}</button>)}</div>
             <KindPicker kind={kind} setKind={setKind} />
           </div>
         )}

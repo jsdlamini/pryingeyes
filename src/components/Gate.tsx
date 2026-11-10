@@ -11,7 +11,13 @@ type View =
   | { status: "unavailable" } | { status: "limited"; retryAfter: number } | { status: "captcha_failed" } | { status: "otp_wrong" }
   | { status: "ok"; requestId: string; tier: number; label: string; step: "otp" | "consent" | "waiting" | "choose"; options: ("reveal" | "chat" | "app_call")[]; otpSent: boolean; consentExpiresAt?: string | null };
 
-export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; handle: string | null; captchaMode: "dev" | "turnstile"; siteKey?: string }) {
+/** s•••@example.com — enough for the caller to know which inbox to check, nothing more on screen. */
+export const maskEmail = (e: string | null | undefined) => {
+  const [user, domain] = (e ?? "").split("@");
+  return user && domain ? `${user[0]}•••@${domain}` : null;
+};
+
+export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; handle: string | null; email?: string | null; captchaMode: "dev" | "turnstile"; siteKey?: string }) {
   const [view, setView] = useState<View | null>(null);
   const [captcha, setCaptcha] = useState<string | null>(null);
   const [code, setCode] = useState(""); const [note, setNote] = useState("");
@@ -106,9 +112,12 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
           <button className="btn block" onClick={start} disabled={busy || !captcha}>{t("gate.continue")}</button>
         </>}
 
-        {v?.step === "otp" && (!v.otpSent ? <button className="btn block" onClick={sendOtp} disabled={busy}>{t("gate.otp.send")}</button> : (
+        {v?.step === "otp" && (!v.otpSent ? <>
+          <p className="small muted">We&apos;ll email a 6-digit code{maskEmail(p.email) ? <> to <b>{maskEmail(p.email)}</b></> : null}. Nothing is sent to your phone, and the person you&apos;re reaching never sees your email.</p>
+          <button className="btn block" onClick={sendOtp} disabled={busy}>{t("gate.otp.send")}</button>
+        </> : (
           <form onSubmit={verifyOtp}>
-            <p className="small muted">{t("gate.otp.sent")}</p>
+            <p className="small muted">{maskEmail(p.email) ? <>We emailed a 6-digit code to <b>{maskEmail(p.email)}</b>. It works for 10 minutes.</> : t("gate.otp.sent")}</p>
             <label htmlFor="g-otp">Code</label>
             <input id="g-otp" className="otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
             <div className="row" style={{ marginTop: 10 }}><button className="btn" disabled={busy || code.length !== 6}>{t("gate.otp.verify")}</button><button type="button" className="linkbtn small" onClick={sendOtp}>Send a new code</button></div>
@@ -122,7 +131,8 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
             <button className="btn block" disabled={busy}>{t("gate.consent.send")}</button>
           </form>)}
 
-        {v?.step === "waiting" && <div role="status"><h2>{t("gate.consent.waiting")}</h2><p className="muted small">{t("gate.consent.waiting.body")}</p></div>}
+        {v?.step === "waiting" && <div role="status"><h2>{t("gate.consent.waiting")}</h2><p className="muted small">{t("gate.consent.waiting.body")}</p>
+          <div className="alert info small" style={{ marginTop: 10 }}><b>No need to wait here.</b> You can close this page. If they say yes, we&apos;ll email you a link that brings you straight back.</div></div>}
 
         {v?.step === "choose" && !reveal && <>
           <h2>{t("gate.choose")}</h2>

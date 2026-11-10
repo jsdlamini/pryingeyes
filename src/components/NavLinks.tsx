@@ -27,6 +27,7 @@ export function NavLinks({ handle, avatar, moderator, admin }: { handle: string;
   const path = usePathname();
   const [unread, setUnread] = useState(0);
   const [chats, setChats] = useState(0);
+  const [waiting, setWaiting] = useState(0);
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [menu, setMenu] = useState(false);       // mobile drawer
   const [bell, setBell] = useState(false);       // notifications panel
@@ -36,7 +37,7 @@ export function NavLinks({ handle, avatar, moderator, admin }: { handle: string;
 
   const refresh = useCallback(() => {
     if (document.visibilityState !== "visible") return;
-    api("/api/notifications").then((r) => { setUnread(r.unread); setChats(r.chatsUnread ?? 0); }).catch(() => undefined);
+    api("/api/notifications").then((r) => { setUnread(r.unread); setChats(r.chatsUnread ?? 0); setWaiting(r.requestsWaiting ?? 0); }).catch(() => undefined);
   }, []);
   useEffect(() => {
     refresh();
@@ -64,7 +65,9 @@ export function NavLinks({ handle, avatar, moderator, admin }: { handle: string;
     window.location.href = "/";
   }
 
-  const current = (href: string) => path === href || (href !== "/groups" && path.startsWith(href));
+  const current = (href: string) => href === "/dashboard"
+    ? path.startsWith("/dashboard") && !path.startsWith("/dashboard/requests")
+    : path === href || (href !== "/groups" && path.startsWith(href));
   const link = (href: string, label: string, icon: IconName, extra?: React.ReactNode) => (
     <Link href={href} aria-current={current(href) ? "page" : undefined}>
       <Icon name={icon} size={16} />{label}{extra}
@@ -80,17 +83,15 @@ export function NavLinks({ handle, avatar, moderator, admin }: { handle: string;
       </button>
 
       <nav className={`nav collapsible${menu ? " open" : ""}`} aria-label="Main">
-        {/* Social cluster */}
+        {/* Codes first, then the people reaching you, then the community */}
         <span className="nav-group">
-          {link("/groups", "Feed", "home")}
-          {link("/people", "People", "people")}
+          {link("/dashboard", "Codes", "shield")}
+          {link("/dashboard/requests", t("nav.requests"), "inbox", badge(waiting, "waiting"))}
           {link("/chats", t("nav.chats"), "chat", chatsBadge(chats))}
+          {link("/groups", "Community", "people")}
         </span>
         <span className="spacer" />
         <span className="nav-right">
-          <Link href="/dashboard/requests" className="hide-sm" aria-current={current("/dashboard/requests") ? "page" : undefined}>
-            <Icon name="inbox" size={16} />{t("nav.requests")}
-          </Link>
 
           {/* Notifications */}
           <span style={{ position: "relative" }} ref={bellRef}>

@@ -3,29 +3,47 @@ import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { Icon } from "@/components/Icon";
 
-export function TokenShare({ link, short, label }: { link: string; short: string; label?: string }) {
+/**
+ * Shows a new code once. We only keep a fingerprint of it, so the owner must keep it now: `onSavedChange`
+ * reports whether they have copied, shared or downloaded it, and pages keep "Done" disabled until then.
+ */
+export function TokenShare({ link, short, label, onSavedChange }: { link: string; short: string; label?: string; onSavedChange?: (saved: boolean) => void }) {
   const [qr, setQr] = useState("");
   const [copied, setCopied] = useState("");
+  const [saved, setSaved] = useState(false);
+  const [canShare, setCanShare] = useState(false);
   useEffect(() => { QRCode.toDataURL(link, { margin: 1, width: 240, errorCorrectionLevel: "M" }).then(setQr); }, [link]);
-  const copy = async (v: string, what: string) => { await navigator.clipboard?.writeText(v); setCopied(what); setTimeout(() => setCopied(""), 1800); };
-  const downloadQr = () => { const a = document.createElement("a"); a.href = qr; a.download = `pryingeyes-${(label ?? "code").replace(/\W+/g, "-")}.png`; a.click(); };
+  useEffect(() => { setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function"); }, []);
+  useEffect(() => { onSavedChange?.(saved); }, [saved, onSavedChange]);
+  const kept = () => setSaved(true);
+  const copy = async (v: string, what: string) => {
+    try { await navigator.clipboard?.writeText(v); kept(); setCopied(what); setTimeout(() => setCopied(""), 1800); } catch { /* clipboard blocked: the text is still selectable */ }
+  };
+  const share = async () => {
+    try { await navigator.share({ title: label ? `Reach me: ${label}` : "Reach me on PryingEyes", text: "Tap to reach me without my phone number:", url: link }); kept(); }
+    catch { /* cancelled */ }
+  };
+  const downloadQr = () => { const a = document.createElement("a"); a.href = qr; a.download = `pryingeyes-${(label ?? "code").replace(/\W+/g, "-")}.png`; a.click(); kept(); };
   return (
     <div className="stack">
-      <div className="alert warn"><b>Copy or download these now.</b> We only keep a fingerprint of the code, so we can't show it again. If you lose it, rotate the token for a new one.</div>
-      <div className="grid2" style={{ alignItems: "start" }}>
-        <div className="stack">
-          <div><label>Share link</label><div className="codebox" data-testid="share-link">{link}</div>
-            <button className="btn sm" style={{ marginTop: 6 }} onClick={() => copy(link, "link")}><Icon name={copied === "link" ? "check" : "link"} size={16} />{copied === "link" ? "Copied" : "Copy link"}</button></div>
-          <div><label>Short code (for platforms without links)</label><div className="codebox" data-testid="share-short">{short}</div>
-            <button className="btn ghost sm" style={{ marginTop: 6 }} onClick={() => copy(short, "short")}><Icon name={copied === "short" ? "check" : "copy"} size={16} />{copied === "short" ? "Copied" : "Copy code"}</button></div>
+      <div className="alert warn"><b>You won't see this code again.</b> We only keep a fingerprint of it, so copy, share or save it now. Lost it later? Replace the code for a new one.</div>
+      <div className="code-pass" aria-label="Your new code">
+        <div className="code-pass-body">
+          <span className="code-pass-kicker">Contact code{label ? ` · ${label}` : ""}</span>
+          <span className="code-pass-code" data-testid="share-short">{short}</span>
+          <span className="code-pass-link" data-testid="share-link">{link}</span>
         </div>
-        <div style={{ textAlign: "center" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {qr && <img src={qr} alt={`QR code for ${label ?? "this token"}`} width={200} height={200} style={{ background: "#fff", padding: 6, borderRadius: 8 }} />}
-          <div><button className="btn ghost sm" onClick={downloadQr} disabled={!qr}><Icon name="download" size={16} />Download QR</button></div>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {qr && <img src={qr} alt={`QR code for ${label ?? "this code"}`} width={120} height={120} className="code-pass-qr" />}
       </div>
-      <p className="muted small">The code contains nothing about your number. Revoke it any time.</p>
+      <div className="share-actions">
+        <button className="btn ghost" onClick={() => copy(link, "link")}><Icon name={copied === "link" ? "check" : "link"} size={16} />{copied === "link" ? "Copied" : "Copy link"}</button>
+        {canShare
+          ? <button className="btn accent" onClick={share}><Icon name="share" size={16} />Share</button>
+          : <button className="btn ghost" onClick={() => copy(short, "short")}><Icon name={copied === "short" ? "check" : "copy"} size={16} />{copied === "short" ? "Copied" : "Copy code"}</button>}
+        <button className="btn ghost" onClick={downloadQr} disabled={!qr}><Icon name="download" size={16} />Save QR</button>
+      </div>
+      <p className="muted small">The code contains nothing about your number. Pause or replace it any time.</p>
     </div>
   );
 }

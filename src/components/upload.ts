@@ -36,8 +36,8 @@ export async function uploadImage(file: File): Promise<string> {
   const name = blob.type === "image/webp" ? "photo.webp" : blob.type === "image/jpeg" ? "photo.jpg" : file.name;
   fd.append("file", blob, name);
   const r = await fetch("/api/upload", { method: "POST", body: fd });
-  if (!r.ok) throw new Error("upload failed");
-  const j = await r.json();
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.message || j.error || "Upload failed");
   return j.url as string;
 }
 
@@ -51,7 +51,7 @@ export async function uploadAudio(blob: Blob): Promise<string> {
   fd.append("file", fixed, name);
   const r = await fetch("/api/upload", { method: "POST", body: fd });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || j.message || "Upload failed");
+  if (!r.ok) throw new Error(j.message || j.error || "Upload failed");
   return j.url as string;
 }
 
@@ -65,6 +65,6 @@ export async function uploadVideo(file: File): Promise<string> {
   fd.append("file", fixed, name);
   const r = await fetch("/api/upload", { method: "POST", body: fd });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || j.message || "Upload failed");
+  if (!r.ok) throw new Error(j.message || j.error || "Upload failed");
   return j.url as string;
 }

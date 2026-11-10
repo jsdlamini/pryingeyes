@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, errMsg, relTime } from "./api";
 import { Icon } from "./Icon";
 import { LinkCard } from "./LinkCard";
-import { Tier } from "./Tier";
+import { Tier, TIER_LINES, TIER_NAMES } from "./Tier";
 import { Comments } from "./Comments";
 import { uploadAudio, uploadImage, uploadVideo } from "./upload";
 import { useVoiceRecorder } from "./useVoiceRecorder";
@@ -193,7 +193,7 @@ export function PostCard({ p, onChanged, following, onFollow }: {
   );
 }
 
-const TIER_HELP: Record<number, string> = { 1: "Anyone verified can message or call you right away.", 2: "They also confirm a code sent to their email.", 3: "You approve each person first." };
+const TIER_HELP = TIER_LINES;
 
 /** Post box with "Attach my contact code". Phone numbers in the text are refused with an explanation. */
 export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeholder: string; onPost: (b: { text: string; attach: { tier: number; kind: CodeKind } | null; attachment: string | null }) => Promise<unknown>; buttonLabel?: string }) {
@@ -250,7 +250,7 @@ export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeh
         <div className="stack small">
           {warnShow && <div className="alert warn" style={{ margin: 0 }}>Your contact code is attached by default — people you share with can message or call you. Turn it off any time with the button below.</div>}
           <p className="muted">People open your code to message or call you in PryingEyes. No phone number is involved. Each group gets its own code, which you can switch off on <a href="/dashboard">My codes</a>.</p>
-          <div className="chips">{[1, 2, 3].map((n) => <button type="button" key={n} className="chip" aria-pressed={tier === n} onClick={() => setTier(n)}>{["", "Open", "Verified", "Consent"][n]}</button>)}</div>
+          <div className="chips">{[1, 2, 3].map((n) => <button type="button" key={n} className="chip" aria-pressed={tier === n} onClick={() => setTier(n)}>{TIER_NAMES[n]}</button>)}</div>
           <p className="muted tiny">{TIER_HELP[tier]}</p>
           <KindPicker kind={kind} setKind={setKind} />
         </div>

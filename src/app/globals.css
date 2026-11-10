@@ -689,3 +689,44 @@ audio.post-attach.voice, audio.comment-attach.voice { width: 220px; max-width: 1
 /* Video attachments */
 .composer-media { display: block; max-width: 240px; max-height: 180px; border-radius: 10px; }
 video.post-attach.video, video.comment-attach.video, video.msg-attach.video { max-width: 100%; max-height: 320px; border-radius: 10px; margin-top: 6px; }
+
+/* ═══ 0.12 redesign: codes first, brighter accents ═══════════════════════════
+   Pops are used sparingly for meaning: coral = needs you, amber = "Ask me",
+   lime = safe/done, violet = community. The signal gradient stays reserved for
+   things protected by PryingEyes (codes, the gate). */
+:root {
+  --pop-coral: #F43F5E; --pop-amber: #F59E0B; --pop-lime: #16A34A; --pop-violet: #7C3AED; --pop-cyan: #06B6D4;
+  --pass-bg: #0C2238; --pass-ink: #EAF6FF; --pass-muted: #B9CCDE;
+}
+:root[data-theme="dark"] { --pop-lime: #4ADE80; --pop-violet: #A78BFA; --pass-bg: #0F2A47; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="dark"]) { --pop-lime: #4ADE80; --pop-violet: #A78BFA; --pass-bg: #0F2A47; } }
+
+/* Bottom navigation: badge on the icon, a bright bar over the current tab */
+.bn-icon { position: relative; display: inline-flex; }
+.bn-badge { position: absolute; top: -6px; right: -10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--pop-coral); color: #fff; font-size: .68rem; font-weight: 800; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--card-solid); }
+@media (max-width: 880px) {
+  .bottom-nav a { position: relative; min-height: 48px; }
+  .bottom-nav a[aria-current="page"]::before { content: ""; position: absolute; top: -5px; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--signal); }
+}
+
+/* Protection level chips: brighter, and "Ask me" in amber so it reads as "needs your yes" */
+.tier { font-size: .74rem; padding: 3px 9px; }
+.tier.t3 { background: color-mix(in srgb, var(--pop-amber) 18%, transparent); color: var(--t3); }
+
+/* A new code shown once, as a "pass" */
+.code-pass { position: relative; display: flex; gap: 16px; align-items: center; padding: 18px; border-radius: 20px; background: var(--pass-bg); color: var(--pass-ink); overflow: hidden; }
+.code-pass::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: linear-gradient(90deg, var(--pop-cyan), #3B82F6 55%, var(--pop-violet)); }
+.code-pass-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.code-pass-kicker { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--pass-muted); }
+.code-pass-code { font-family: ui-monospace, "DejaVu Sans Mono", Menlo, monospace; font-size: 1.45rem; font-weight: 700; letter-spacing: .04em; overflow-wrap: anywhere; }
+.code-pass-link { font-size: .8rem; color: var(--pass-muted); overflow-wrap: anywhere; }
+.code-pass-qr { flex-shrink: 0; width: 120px; height: 120px; background: #fff; padding: 6px; border-radius: 12px; }
+@media (max-width: 480px) { .code-pass { flex-direction: column; align-items: flex-start; } }
+.share-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.share-actions .btn { min-height: 48px; }
+@media (max-width: 420px) { .share-actions { grid-template-columns: 1fr; } }
+
+/* Small bright touches */
+.badge { background: var(--pop-coral); }
+.alert.info b { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

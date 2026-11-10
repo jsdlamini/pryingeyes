@@ -171,7 +171,7 @@ test("Passkey sign-in works on its own (no password)", async ({ page, context })
   await context.clearCookies();
   await page.goto("/login");
   await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-  await expect(page).toHaveURL(/\/groups/);                 // signed-in home is the feed
+  await expect(page).toHaveURL(/\/dashboard/);              // signed-in home is My codes
   await expect(page.getByTestId("account-menu")).toContainText(`@${o.handle}`);
 });
 

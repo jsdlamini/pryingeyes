@@ -1,21 +1,29 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { route } from "@/lib/http";
+import { requireUser } from "@/lib/auth";
+import { canView, CONTENT_TYPES, readUpload, UPLOAD_FILE_RE, type UploadExt } from "@/lib/uploads";
 
-const TYPES: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", webm: "audio/webm", m4a: "audio/mp4", mp3: "audio/mpeg", ogg: "audio/ogg", mp4: "video/mp4", mov: "video/quicktime", m4v: "video/mp4" };
-
-export const GET = async (_req: Request, { params }: { params: Promise<{ file: string }> }) => {
-  const { file } = await params;
-  if (!/^[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg|mp4|mov|m4v)$/.test(file)) return new Response("Not found", { status: 404 });
-  const ext = file.split(".").pop()!;
-  try {
-    const buf = await readFile(path.join("/app/var", "uploads", file));
-    return new Response(buf, {
-      headers: {
-        "Content-Type": TYPES[ext],
-        "Cache-Control": "public, max-age=31536000, immutable",
-      },
-    });
-  } catch {
-    return new Response("Not found", { status: 404 });
-  }
-};
+/**
+ * Serves an uploaded file only to a signed-in person who may see it (they uploaded it, or can see
+ * the message, post, comment or profile that uses it). Everyone else gets the same 404, so the
+ * response never confirms that a file exists. Never cached by shared caches.
+ */
+export const GET = route<{ file: string }>(async (req, { file }) => {
+  const notFound = () => new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+  const m = UPLOAD_FILE_RE.exec(file);
+  if (!m) return notFound();
+  let userId: string;
+  try { userId = (await requireUser(req)).user.id; } catch { return notFound(); }
+  if (!(await canView(userId, file))) return notFound();
+  const buf = await readUpload(file);
+  if (!buf) return notFound();
+  return new Response(new Uint8Array(buf), {
+    headers: {
+      "Content-Type": CONTENT_TYPES[m[2] as UploadExt],
+      "Content-Length": String(buf.length),
+      "Cache-Control": "private, no-store, max-age=0",
+      "Content-Disposition": "inline",
+      "X-Content-Type-Options": "nosniff",
+      "Cross-Origin-Resource-Policy": "same-origin",
+    },
+  });
+});

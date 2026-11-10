@@ -12,7 +12,7 @@ export default function Privacy() {
           <li>The numbers you protect — <b>encrypted</b>. We never put them in logs, analytics or emails.</li>
           <li>Codes you create — only as one-way fingerprints. Even we can't read them back, so copy them when you make them.</li>
           <li>An activity log of every request to your codes: kept 12 months by default; you can choose 1–24 months.</li>
-          <li>Chat messages — encrypted at rest. On Tier 3 codes they disappear after 24 hours.</li>
+          <li>Chat messages — encrypted at rest. On “Ask me” codes they disappear after 24 hours.</li>
           <li>One-time email codes and human-check results — deleted within 90 days.</li>
         </ul>
         <h2>If you contact someone (callers)</h2>

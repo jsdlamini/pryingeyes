@@ -14,6 +14,7 @@ export function DashboardClient() {
   const [d, setD] = useState<Summary | null>(null);
   const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
   const [share, setShare] = useState<{ link: string; short: string; label: string } | null>(null);
+  const [shareSaved, setShareSaved] = useState(false);
   const [copied, setCopied] = useState<string>("");
   const panicRef = useRef<HTMLDialogElement>(null);
   const load = useCallback(() => { if (document.visibilityState !== "visible") return; return api<Summary>("/api/dashboard").then(setD).catch((e) => setErr(errMsg(e))); }, []);
@@ -60,7 +61,7 @@ export function DashboardClient() {
       {err && <div className="alert err" role="alert">{err}</div>}
       {msg && <div className="alert ok" role="status">{msg}</div>}
       {s.pendingApprovals > 0 && <div className="alert info spread"><span><b>{s.pendingApprovals}</b> {s.pendingApprovals === 1 ? "person is" : "people are"} waiting for your approval.</span><Link className="btn sm" href="/dashboard/requests">Review</Link></div>}
-      {share && <div className="card" style={{ marginBottom: 14 }}><div className="spread"><h2>New code for "{share.label}"</h2><button className="iconbtn sm" onClick={() => setShare(null)} aria-label="Close" title="Close"><Icon name="x" size={16} /></button></div><TokenShare {...share} /></div>}
+      {share && <div className="card" style={{ marginBottom: 14 }}><div className="spread"><h2>New code for "{share.label}"</h2><button className="iconbtn sm" onClick={() => { if (shareSaved || confirm("You won't see this code again. Close without copying, sharing or saving it?")) setShare(null); }} aria-label="Close" title="Close"><Icon name="x" size={16} /></button></div><TokenShare {...share} onSavedChange={setShareSaved} /></div>}
       <div className="stats">
         <div className="stat"><b>{s.activeTokens}</b><span>Active codes</span></div>
         <div className="stat"><b>{s.contactsThisWeek}</b><span>Contacts this week</span></div>
@@ -124,7 +125,7 @@ export function DashboardClient() {
           <div className="step"><span className="n">1</span><b>Share a code</b><span className="small muted">Post its link or short code wherever you&apos;d normally put your number, or attach it to a group post. Its tier sets which checks people pass first.</span></div>
           <div className="step"><span className="n">2</span><b>They chat with you</b><span className="small muted">They can message you in the app. You get a notification and an unread badge on <Link href="/chats">Chats</Link>; reply there. Numbers are never shown.</span></div>
           <div className="step"><span className="n">3</span><b>Or call you in the app</b><span className="small muted">While PryingEyes is open, an incoming call rings on screen — answer or decline. If it's closed, you get a missed-call notification and can reply in the chat. No phone numbers are used.</span></div>
-          <div className="step"><span className="n">4</span><b>Approve, block or revoke</b><span className="small muted">Tier 3 requests wait in <Link href="/dashboard/requests">Requests</Link> for you. Block or report from any chat, and revoke a code whenever you like.</span></div>
+          <div className="step"><span className="n">4</span><b>Approve, block or revoke</b><span className="small muted">People reaching your “Ask me” codes wait in <Link href="/dashboard/requests">Requests</Link> for you. Block or report from any chat, and revoke a code whenever you like.</span></div>
         </div>
       </details>
       {s.numbers === 0 && (

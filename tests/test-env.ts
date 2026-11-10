@@ -7,6 +7,7 @@ export const TEST_ENV: Record<string, string> = {
   DATABASE_URL: process.env.TEST_DATABASE_URL === "embedded" ? "" : (process.env.TEST_DATABASE_URL ?? "postgresql://pryingeyes:pryingeyes@127.0.0.1:5433/pryingeyes_test"),
   REDIS_URL: process.env.TEST_REDIS_URL === "memory" ? "" : (process.env.TEST_REDIS_URL ?? "redis://127.0.0.1:6380/15"),
   DATA_DIR: "./var/test-data",
+  UPLOAD_DIR: "./var/test-uploads",
   MASTER_KEK: Buffer.alloc(32, 1).toString("base64"),
   TOKEN_PEPPER: Buffer.alloc(32, 2).toString("base64"),
   BLIND_INDEX_KEY: Buffer.alloc(32, 3).toString("base64"),

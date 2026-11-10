@@ -26,12 +26,12 @@ import { createReport, REPORT_REASONS } from "./moderation";
 import { notify } from "./notify";
 import { reactionsFor } from "./reactions";
 import { log } from "./log";
+import { deleteUpload, ownUpload } from "./uploads";
 
 export const INVITE_CHARS = 12;               // 60 bits
 export const MAX_GROUP_MEMBERS = 1000;
 export const STATUS_HOURS = 24;
 const POST_MAX = 1000;
-const ATTACH_RE = /^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg|mp4|mov|m4v)$/;
 
 type Group = typeof schema.groups.$inferSelect;
 type Post = typeof schema.posts.$inferSelect;
@@ -414,7 +414,7 @@ export async function createPost(authorId: string, i: { groupId: string | null; 
   if (!b.allowed) throw tooMany(b.retryAfter, "You're posting a lot. Try again in a little while.");
 
   const code = i.attach ? await codeFor(authorId, place, i.attach) : null;
-  const attachment = i.attachment && ATTACH_RE.test(i.attachment) ? i.attachment : null;
+  const attachment = await ownUpload(authorId, i.attachment);
   const id = crypto.randomUUID();
   await db().insert(schema.posts).values({
     id, groupId: place.groupId, authorId, bodyEnc: await encryptForUser(authorId, text, `post:${id}`),
@@ -585,7 +585,7 @@ export async function statusFeed(userId: string) {
   return [...by.values()].sort((a, b) => (a.you ? -1 : b.you ? 1 : b.latestAt.getTime() - a.latestAt.getTime()));
 }
 
-async function visiblePost(userId: string, postId: string) {
+export async function visiblePost(userId: string, postId: string) {
   const [p] = await db().select().from(schema.posts).where(eq(schema.posts.id, postId));
   if (!p) throw notFound("post_not_found", "This post isn't available.");
   if (p.groupId) {
@@ -612,7 +612,7 @@ export async function createComment(authorId: string, postId: string, text: stri
     if (!parent || parent.postId !== p.id) throw notFound("comment_not_found", "That comment isn’t here.");
   }
   const id = crypto.randomUUID();
-  const att = attachment && ATTACH_RE.test(attachment) ? attachment : null;
+  const att = await ownUpload(authorId, attachment);
   await db().insert(schema.comments).values({ id, postId, authorId, parentId: parentId ?? null, bodyEnc: await encryptForUser(authorId, t, `comment:${id}`), attachment: att });
   await audit({ type: "post.commented", actorId: authorId, subjectType: "post", subjectId: postId });
   return { id };
@@ -638,6 +638,7 @@ export async function deletePost(userId: string, postId: string) {
   const { p, admin } = await visiblePost(userId, postId);
   if (p.authorId !== userId && !admin) throw forbidden("not_yours", "You can only delete your own posts.");
   await db().delete(schema.posts).where(eq(schema.posts.id, postId));
+  if (p.attachment) await deleteUpload(p.attachment);
   await audit({ type: "post.deleted", actorId: userId, subjectType: "post", subjectId: postId, payload: { byAdmin: p.authorId !== userId } });
 }
 
@@ -676,6 +677,7 @@ export async function reportPost(userId: string, postId: string, reason: typeof 
 
 /** Removes status updates older than 24 hours. */
 export async function sweepStatuses() {
-  const r = await db().delete(schema.posts).where(and(isNull(schema.posts.groupId), sql`${schema.posts.expiresAt} <= now()`)).returning({ id: schema.posts.id });
+  const r = await db().delete(schema.posts).where(and(isNull(schema.posts.groupId), sql`${schema.posts.expiresAt} <= now()`)).returning({ id: schema.posts.id, attachment: schema.posts.attachment });
+  for (const p of r) if (p.attachment) await deleteUpload(p.attachment);
   return r.length;
 }

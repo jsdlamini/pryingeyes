@@ -1,11 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, errMsg } from "@/components/api";
 import { passkeysSupported, authenticateWithPasskey } from "@/components/passkey";
 
 const nextUrl = () => { const n = new URLSearchParams(window.location.search).get("next"); return n?.startsWith("/") && !n.startsWith("//") ? n : "/dashboard"; };
 
 export default function Mfa() {
+  // Passkey support is decided after mount: knowing it during the first render would
+  // make the server HTML differ from the client tree and force a full re-hydration.
+  const [canPasskey, setCanPasskey] = useState(false);
+  useEffect(() => { setCanPasskey(passkeysSupported()); }, []);
   const [code, setCode] = useState(""); const [rc, setRc] = useState("");
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"main" | "recovery" | "cooldown">("main");
@@ -33,7 +37,7 @@ export default function Mfa() {
       <div className="card stack">
         {err && <div className="alert err" role="alert">{err}</div>}
         {mode === "main" && <>
-          {passkeysSupported() && <button className="btn block accent" onClick={passkey} disabled={busy}>Use my passkey</button>}
+          {canPasskey && <button className="btn block accent" onClick={passkey} disabled={busy}>Use my passkey</button>}
           <form onSubmit={totp}>
             <label htmlFor="code">Code from your authenticator app</label>
             <input id="code" className="otp" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />

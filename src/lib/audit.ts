@@ -34,7 +34,7 @@ export type AuditType =
   | "call.started" | "call.answered" | "call.ended" | "call.missed" | "call.declined" | "call.busy"
   | "chat.opened" | "chat.blocked" | "chat.reported"
   | "group.created" | "group.joined" | "group.join_requested" | "group.join_declined" | "group.left" | "group.member_removed" | "group.invite_reset"
-  | "post.created" | "post.deleted" | "post.reported" | "post.rejected_contact" | "post.commented"
+  | "post.created" | "post.deleted" | "post.reported" | "post.rejected_contact" | "post.commented" | "post.edited"
   | "moderation.action" | "admin.requested" | "admin.approved" | "admin.rejected" | "admin.executed"
   | "evidence.exported" | "retention.applied";
 

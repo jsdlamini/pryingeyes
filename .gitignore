@@ -17,3 +17,7 @@ mobile/ios
 dump.rdb
 
 mobile/
+
+# local backup files
+*.bak
+*.bak[0-9]*

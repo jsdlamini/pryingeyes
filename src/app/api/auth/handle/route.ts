@@ -9,7 +9,10 @@ import { tooMany } from "@/lib/errors";
  * GET /api/auth/handle?check=abc  → { handle, valid, available, message? }
  */
 export const GET = route(async (req) => {
-  const b = await hit(`handle:ip:${clientIp(req)}`, 60, 60);
+  // Generous because many people share one network address (offices, campuses, mobile
+  // carriers): a sign-up flow itself makes several checks. Still enough of a brake on
+  // handle enumeration, which is the attack this guards against.
+  const b = await hit(`handle:ip:${clientIp(req)}`, 240, 300);
   if (!b.allowed) throw tooMany(b.retryAfter);
   const check = new URL(req.url).searchParams.get("check");
   if (check === null) return json({ handle: await suggestHandle() });

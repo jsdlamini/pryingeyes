@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, errMsg } from "@/components/api";
 import { passkeysSupported, authenticateWithPasskey } from "@/components/passkey";
@@ -11,6 +11,10 @@ function after(status: string) {
 }
 
 export default function Login() {
+  // Passkey support is decided after mount: knowing it during the first render would
+  // make the server HTML differ from the client tree and force a full re-hydration.
+  const [canPasskey, setCanPasskey] = useState(false);
+  useEffect(() => { setCanPasskey(passkeysSupported()); }, []);
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   async function submit(e: React.FormEvent) {
@@ -26,7 +30,7 @@ export default function Login() {
       <h1>Sign in</h1>
       <div className="card stack">
         {err && <div className="alert err" role="alert">{err}</div>}
-        {passkeysSupported() && <button className="btn block social" onClick={passkey} disabled={busy}><Icon name="key" size={18} />Sign in with a passkey</button>}
+        {canPasskey && <button className="btn block social" onClick={passkey} disabled={busy}><Icon name="key" size={18} />Sign in with a passkey</button>}
         <form onSubmit={submit}>
             <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
             <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>

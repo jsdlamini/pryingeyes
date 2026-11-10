@@ -42,6 +42,15 @@ export function HandleField({ value, onChange, onValidity, id = "handle" }:
 
   useEffect(() => { if (!value) suggest(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Safety net: if our suggested handle was wiped by a stale form update elsewhere
+  // (a controlled-input race), put it back. A deliberate clear (last.current === "") stays cleared.
+  useEffect(() => {
+    if (!value && last.current) {
+      const t = setTimeout(() => onChange(last.current!), 350);
+      return () => clearTimeout(t);
+    }
+  }, [value, onChange]);
+
   function edit(raw: string) {
     if (timer.current) clearTimeout(timer.current);
     if (raw.includes("@")) {

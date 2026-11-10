@@ -12,5 +12,5 @@ export const GET = route<{ id: string }>(async (req, { id }) => {
 export const POST = route<{ id: string }>(async (req, { id }) => {
   const b = await readJson(req, PostBody);
   const ctx = await authorFor(req, b.attach);
-  return json(await createPost(ctx.user.id, { groupId: uuid(id), text: b.text, attach: b.attach }), 201);
+  return json(await createPost(ctx.user.id, { groupId: uuid(id), text: b.text, attach: b.attach, attachment: b.attachment }), 201);
 });

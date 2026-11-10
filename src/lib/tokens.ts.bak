@@ -235,7 +235,7 @@ export async function panicRevokeAll(ownerId: string) {
   });
 }
 
-/** Owner view of tokens. Codes are never retrievable: only the 4-character prefix. */
+/** Owner view of tokens. Codes are never retrievable after minting: only the 4-character prefix. */
 export async function listTokens(ownerId: string) {
   const rows = await db().select({
     t: schema.tokens, hint: schema.phoneNumbers.hint, numberLabel: schema.phoneNumbers.label,
@@ -245,7 +245,8 @@ export async function listTokens(ownerId: string) {
   return rows.map(({ t, hint, numberLabel }) => ({
     id: t.id, label: t.label, class: t.class, tier: t.tier, context: t.context,
     status: t.expiresAt && t.expiresAt <= now && LIVE_STATUSES.includes(t.status as any) ? "expired" : t.status,
-    displayPrefix: t.displayPrefix, expiresAt: t.expiresAt, uses: t.uses, decodeBudget: t.decodeBudget,
+    displayPrefix: t.displayPrefix,
+    expiresAt: t.expiresAt, uses: t.uses, decodeBudget: t.decodeBudget,
     rotationDue: !!(t.rotationDueAt && t.rotationDueAt <= now), createdAt: t.createdAt,
     appOnly: !t.numberId,
     number: t.numberId ? { id: t.numberId, hint, label: numberLabel } : null,

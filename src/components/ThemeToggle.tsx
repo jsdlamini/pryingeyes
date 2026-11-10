@@ -9,7 +9,7 @@ function apply(theme: "light" | "dark") {
   try { localStorage.setItem(KEY, theme); } catch { /* private mode */ }
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ label }: { label?: string }) {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   useEffect(() => {
     const cur = document.documentElement.getAttribute("data-theme");
@@ -23,6 +23,7 @@ export function ThemeToggle() {
   return (
     <button type="button" className="iconbtn plain" onClick={toggle} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} title={theme === "dark" ? "Light mode" : "Dark mode"}>
       <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+      {label ? <span className="nav-label">{label}</span> : null}
     </button>
   );
 }

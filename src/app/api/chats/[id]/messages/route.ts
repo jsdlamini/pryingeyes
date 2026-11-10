@@ -18,7 +18,7 @@ export const GET = route<{ id: string }>(async (req, { id }) => {
  * who it was shared with). Both apps show any code link in a message as a tappable code.
  */
 export const POST = route<{ id: string }>(async (req, { id }) => {
-  const b = await readJson(req, z.object({ text: z.string().max(4000).default(""), attach: AttachBody }));
+  const b = await readJson(req, z.object({ text: z.string().max(4000).default(""), attach: AttachBody, attachment: z.string().regex(/^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg|mp4|mov|m4v)$/).nullable().optional(), attachmentKind: z.enum(["image", "voice"]).optional(), viewOnce: z.boolean().optional() }));
   const ctx = await authorFor(req, b.attach);
   let text = b.text;
   if (b.attach) {
@@ -26,5 +26,5 @@ export const POST = route<{ id: string }>(async (req, { id }) => {
     const code = await mintShareCode(ctx.user.id, `Shared with @${who}`, b.attach);
     text = `${text.trim()}\n${code.link}`.trim();
   }
-  return json(await sendMessage(ctx.user.id, id, text), 201);
+  return json(await sendMessage(ctx.user.id, id, text, { attachment: b.attachment, attachmentKind: b.attachmentKind, viewOnce: b.viewOnce }), 201);
 });

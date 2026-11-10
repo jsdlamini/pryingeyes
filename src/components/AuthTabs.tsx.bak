@@ -1,21 +1,27 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, errMsg } from "@/components/api";
 import { passkeysSupported, authenticateWithPasskey } from "@/components/passkey";
 import { HandleField } from "@/components/HandleField";
 import { Icon } from "@/components/Icon";
+import { CodeEntry } from "@/components/CodeEntry";
 
 const nextUrl = () => {
   const n = new URLSearchParams(window.location.search).get("next");
-  return n?.startsWith("/") && !n.startsWith("//") ? n : "/chats";
+  return n?.startsWith("/") && !n.startsWith("//") ? n : "/groups";
 };
 function after(status: string) {
   window.location.href = status === "mfa_required" ? `/login/mfa?next=${encodeURIComponent(nextUrl())}` : nextUrl();
 }
 
 export function AuthTabs() {
-  const [tab, setTab] = useState<"signin" | "signup">("signin");
+  const [tab, setTab] = useState<"signin" | "signup" | "reach">("signin");
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
+  // Passkey support is only known once the page runs in a browser. Deciding it during the first
+  // render would make the server HTML differ from the client tree (the passkey button appearing
+  // mid-hydration), which forces React to throw the whole page away and rebuild it.
+  const [canPasskey, setCanPasskey] = useState(false);
+  useEffect(() => { setCanPasskey(passkeysSupported()); }, []);
   // sign-in
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   // sign-up
@@ -42,12 +48,15 @@ export function AuthTabs() {
       <div className="auth-tabs" role="tablist" aria-label="Account">
         <button type="button" role="tab" aria-selected={tab === "signin"} className={tab === "signin" ? "on" : ""} onClick={() => { setTab("signin"); setErr(""); }}>Sign in</button>
         <button type="button" role="tab" aria-selected={tab === "signup"} className={tab === "signup" ? "on" : ""} onClick={() => { setTab("signup"); setErr(""); }}>Create account</button>
+        <button type="button" role="tab" aria-selected={tab === "reach"} className={tab === "reach" ? "on" : ""} onClick={() => { setTab("reach"); setErr(""); }}>Reach someone</button>
       </div>
       {err && <div className="alert err" role="alert">{err}</div>}
 
-      {tab === "signin" ? (
+      {tab === "reach" ? (
+        <CodeEntry />
+      ) : tab === "signin" ? (
         <div className="stack">
-          {passkeysSupported() && <button type="button" className="btn block social" onClick={passkey} disabled={busy}><Icon name="key" size={18} />Sign in with a passkey</button>}
+          {canPasskey && <button type="button" className="btn block social" onClick={passkey} disabled={busy}><Icon name="key" size={18} />Sign in with a passkey</button>}
           <form onSubmit={signIn} className="stack">
             <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
             <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>

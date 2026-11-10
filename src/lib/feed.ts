@@ -67,7 +67,14 @@ export async function ownerFeed(ownerId: string, opts: { limit?: number; beforeS
 
 export async function dashboardSummary(ownerId: string) {
   const weekAgo = new Date(Date.now() - 7 * 86400_000);
-  const tokens = await listTokens(ownerId);
+  let tokens = await listTokens(ownerId);
+  if (tokens.length === 0) {
+    try {
+      const { mintShareCode } = await import("./social");
+      await mintShareCode(ownerId, "My code", { tier: 1, kind: "standard" });
+      tokens = await listTokens(ownerId);
+    } catch { /* starter code is best-effort */ }
+  }
   const [contacts] = await db().select({ c: count() }).from(schema.auditEvents)
     .where(and(eq(schema.auditEvents.ownerId, ownerId), eq(schema.auditEvents.type, "gate.passed"), gte(schema.auditEvents.at, weekAgo)));
   const [blocked] = await db().select({ c: count() }).from(schema.auditEvents)

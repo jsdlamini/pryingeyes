@@ -34,10 +34,10 @@ export default function Signup() {
         ) : (
           <form onSubmit={submit}>
             {err && <div className="alert err" role="alert">{err}</div>}
-            <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-            <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="new-password" minLength={10} required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /><p className="hint">At least 10 characters. A short sentence works well.</p></div>
+            <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} /></div>
+            <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" autoComplete="new-password" minLength={10} required value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} /><p className="hint">At least 10 characters. A short sentence works well.</p></div>
             <HandleField value={form.handle} onChange={setHandle} onValidity={setHandleOk} />
-            <label className="check field"><input type="checkbox" checked={form.ageConfirmed} onChange={(e) => setForm({ ...form, ageConfirmed: e.target.checked })} /> <span>I'm 18 or older and accept the <a href="/privacy" target="_blank">privacy notice</a>.</span></label>
+            <label className="check field"><input type="checkbox" checked={form.ageConfirmed} onChange={(e) => setForm((f) => ({ ...f, ageConfirmed: e.target.checked }))} /> <span>I'm 18 or older and accept the <a href="/privacy" target="_blank">privacy notice</a>.</span></label>
             <button className="btn block social" disabled={busy || !form.ageConfirmed || !handleOk}><Icon name="mail" size={18} />Create account</button>
           </form>
         )}

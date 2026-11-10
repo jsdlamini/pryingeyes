@@ -5,25 +5,41 @@ import { useRouter } from "next/navigation";
 import { api, errMsg, relTime } from "@/components/api";
 import { Icon } from "@/components/Icon";
 import { Composer, PostCard, type PostView } from "@/components/Social";
-import { Comments } from "@/components/Comments";
+import { StatusViewer } from "@/components/StatusViewer";
 
 type G = { id: string; name: string; role: string; members: number; lastPostAt: string | null; requests: number };
 type Found = { id: string; name: string; about: string; members: number; joined: boolean; requested: boolean };
-type Person = { author: { id: string; handle: string }; you: boolean; following: boolean; items: PostView[] };
-type TimelineItem = PostView & { author: { id: string; handle: string }; you: boolean; following: boolean };
+type Person = { author: { id: string; handle: string; avatar: string | null }; you: boolean; following: boolean; items: PostView[] };
+type Suggested = { id: string; handle: string; following: boolean; sharesGroups: number };
 
-export default function Groups() {
+export default function Feed() {
   const router = useRouter();
   const [groups, setGroups] = useState<G[] | null>(null);
   const [pending, setPending] = useState<{ id: string; name: string }[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [suggested, setSuggested] = useState<Suggested[]>([]);
+  const [followOverride, setFollowOverride] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState(""); const [found, setFound] = useState<Found[] | null>(null);
   const [listed, setListed] = useState(true);
-  const [people, setPeople] = useState<Person[]>([]);
+  const [filter, setFilter] = useState<"all" | "following">("all");
+  const [focusPerson, setFocusPerson] = useState<string | null>(null);
   const [name, setName] = useState(""); const [invite, setInvite] = useState("");
   const [err, setErr] = useState("");
-  const load = useCallback(() => Promise.all([api("/api/groups"), api("/api/status")])
-    .then(([g, s]) => { setGroups(g.groups); setPending(g.pending); setPeople(s.people); }).catch((e) => setErr(errMsg(e))), []);
-  useEffect(() => { void load(); }, [load]);
+  const [loading, setLoading] = useState(true);
+  const [statusView, setStatusView] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    if (document.visibilityState !== "visible") return;
+    return Promise.all([api("/api/groups"), api("/api/status"), api("/api/social/people?q=")])
+      .then(([g, s, p]) => { setGroups(g.groups); setPending(g.pending); setPeople(s.people); setSuggested((p.people ?? []).slice(0, 4)); setLoading(false); })
+      .catch((e) => setErr(errMsg(e)));
+  }, []);
+  useEffect(() => {
+    void load();
+    const id = setInterval(load, 12000);
+    document.addEventListener("visibilitychange", load);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", load); };
+  }, [load]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault(); setErr("");
@@ -42,94 +58,172 @@ export default function Groups() {
     const m = invite.trim().match(/\/g\/([0-9A-Za-z-]+)/)?.[1] ?? invite.trim();
     if (m) router.push(`/g/${encodeURIComponent(m)}`);
   }
-  async function followHandle(a: { id: string; handle: string }, following: boolean) {
-    setErr("");
-    try { await api("/api/social/follow", { body: { handle: a.handle, follow: !following } }); await load(); } catch (x) { setErr(errMsg(x)); }
+
+  /** Optimistic follow: the button flips immediately; the server confirms behind it. */
+  async function follow(handle: string, following: boolean) {
+    setFollowOverride((o) => ({ ...o, [handle]: !following }));
+    try { await api("/api/social/follow", { body: { handle, follow: !following } }); void load(); }
+    catch (x) { setFollowOverride((o) => ({ ...o, [handle]: following })); setErr(errMsg(x)); }
   }
 
-  const timeline: TimelineItem[] = people
-    .flatMap((p) => p.items.map((it) => ({ ...it, author: p.author, you: p.you, following: p.following })))
+  const me = people.find((p) => p.you);
+  const isFollowing = (h: string, base: boolean) => followOverride[h] ?? base;
+
+  let timeline = people
+    .flatMap((p) => p.items.map((it) => ({ ...it, author: p.author, you: p.you, following: isFollowing(p.author.handle, p.following) })))
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  if (filter === "following") timeline = timeline.filter((p) => p.following || p.you);
+  if (focusPerson) timeline = timeline.filter((p) => p.author.handle === focusPerson);
 
   return (
     <div className="page" style={{ maxWidth: 1100 }}>
-      <div className="spread" style={{ marginBottom: 14 }}>
-        <div><h1 style={{ marginBottom: 2 }}>Feed</h1><p className="muted small" style={{ margin: 0 }}>What&apos;s on people&apos;s minds, and the groups you belong to.</p></div>
-      </div>
       {err && <div className="alert err">{err}</div>}
 
       <div className="feed-layout">
+        <main className="feed-main">
+          {/* 24-hour status rings */}
+          <section className="card card-tight status-faded" aria-label="Live statuses">
+            <div className="status-strip">
+              <button className={`status-person${me ? " ring" : ""}`} data-testid="status-mine"
+                onClick={() => { const c = document.getElementById("composer"); c?.scrollIntoView({ block: "nearest", behavior: "smooth" }); c?.focus(); }}>
+                <span className={`status-dot${me ? "" : " dashed"}`}>{me ? "You"[0] : <Icon name="plus" size={18} />}</span>
+                <span className="tiny">{me ? "You" : "Add yours"}</span>
+              </button>
+              {people.filter((p) => !p.you).map((p) => (
+                <button key={p.author.id} className="status-person ring" data-testid="status-person"
+                  onClick={() => setStatusView(p.author.handle)}>
+                  <span className="status-dot">{p.author.handle[0].toUpperCase()}</span>
+                  <span className="tiny">@{p.author.handle}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div style={{ margin: "14px 0" }}>
+            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>{me ? <>Hi, <span style={{ color: "var(--accent)" }}>@{me.author.handle}</span></> : "Your feed"}</h1>
+            <p className="muted small" style={{ margin: "2px 0 0" }}>What people you know are sharing.</p>
+          </div>
+
+          <Composer placeholder="What's on your mind? Share how you feel…"
+            onPost={async (b) => { await api("/api/status", { body: b }); await load(); }} />
+
+          <section className="card" aria-label="Latest posts">
+            <div className="spread" style={{ marginBottom: 8 }}>
+              <div className="seg" role="group" aria-label="Filter the feed">
+                <button aria-pressed={filter === "all" && !focusPerson} onClick={() => { setFilter("all"); setFocusPerson(null); }}>Latest</button>
+                <button aria-pressed={filter === "following"} onClick={() => { setFilter("following"); setFocusPerson(null); }}>Following</button>
+              </div>
+              {focusPerson && (
+                <button className="chip" onClick={() => setFocusPerson(null)} aria-label={`Stop showing only @${focusPerson}`}>
+                  Only @{focusPerson} <Icon name="x" size={12} />
+                </button>
+              )}
+            </div>
+            {loading && timeline.length === 0 ? (
+              <div className="stack" aria-hidden="true" data-testid="feed-skeleton">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="post-skeleton">
+                    <div className="sk-head"><div className="skeleton sk-avatar" /><div className="skeleton sk-line w40" /></div>
+                    <div className="skeleton sk-line w90" />
+                    <div className="skeleton sk-line w60" />
+                  </div>
+                ))}
+              </div>
+            ) : timeline.length === 0 ? (
+              <p className="muted small">
+                {filter === "following" ? "Nothing from people you follow yet. Find people to follow in the sidebar."
+                  : "Nothing here yet. Share what's on your mind, or join a group."}
+              </p>
+            ) : (
+              <div className="stack">
+                {timeline.map((p) => (
+                  <PostCard key={p.id} p={p} onChanged={load} following={p.following} onFollow={follow} />
+                ))}
+              </div>
+            )}
+          </section>
+        </main>
+
         <aside className="feed-side">
-          <section className="card" aria-labelledby="find-h">
-            <h2 id="find-h" style={{ marginTop: 0 }}>Find a group</h2>
-            <form onSubmit={search} className="row">
+          {/* People to follow */}
+          <section className="card card-tight" aria-labelledby="people-h">
+            <div className="spread">
+              <h2 id="people-h" style={{ margin: 0 }}>People</h2>
+              <Link className="small" href="/people">Find people</Link>
+            </div>
+            {suggested.length === 0 ? <p className="muted small" style={{ margin: "6px 0 0" }}>Join a group or post a status — people you meet appear here.</p> : (
+              <div style={{ marginTop: 6 }}>
+                {suggested.map((p) => (
+                  <div key={p.id} className="person-row">
+                    <span className="avatar sm" aria-hidden>{p.handle[0].toUpperCase()}</span>
+                    <span className="who"><b>@{p.handle}</b><span>{p.sharesGroups ? `${p.sharesGroups} shared group${p.sharesGroups === 1 ? "" : "s"}` : "Live status"}</span></span>
+                    <button className={`followbtn${isFollowing(p.handle, p.following) ? " on" : ""}`}
+                      onClick={() => follow(p.handle, isFollowing(p.handle, p.following))}
+                      aria-label={isFollowing(p.handle, p.following) ? `Unfollow @${p.handle}` : `Follow @${p.handle}`}
+                      title={isFollowing(p.handle, p.following) ? `Unfollow @${p.handle}` : `Follow @${p.handle}`}>
+                      {isFollowing(p.handle, p.following) ? <Icon name="check" size={12} /> : <Icon name="userPlus" size={12} />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Groups hub: search, yours, create, invite — all in one place */}
+          <section className="card card-tight" aria-labelledby="groups-h">
+            <h2 id="groups-h" style={{ margin: 0 }}>Groups</h2>
+            <form onSubmit={search} className="row" style={{ marginTop: 8, flexWrap: "nowrap" }}>
               <label htmlFor="gq" className="sr-only">Search groups</label>
-              <input id="gq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or topic" style={{ flex: 1 }} data-testid="group-search" />
-              <button className="iconbtn solid" aria-label="Search" title="Search"><Icon name="search" size={18} /></button>
+              <input id="gq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or topic" data-testid="group-search" />
+              <button className="iconbtn solid" aria-label="Search" title="Search"><Icon name="search" size={17} /></button>
             </form>
             {found && (found.length === 0 ? <p className="muted small">No groups match.</p> : (
-              <ul className="members" style={{ marginTop: 10 }}>{found.map((g) => (
+              <ul className="members" style={{ marginTop: 8 }}>{found.map((g) => (
                 <li key={g.id} data-testid="found-group"><span><b>{g.name}</b><br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}</span></span>
                   {g.joined ? <Link className="btn ghost sm" href={`/groups/${g.id}`}>Open</Link>
                     : g.requested ? <span className="muted small">Asked</span>
                     : <button className="btn sm" onClick={() => ask(g)} data-testid="ask-join">Join</button>}
                 </li>))}</ul>
             ))}
-          </section>
 
-          <section className="card">
-            <h2 style={{ marginTop: 0 }}>Your groups</h2>
-            {!groups ? <p>Loading…</p> : groups.length === 0 ? <p className="muted small">No groups yet.</p> : (
+            <h3 style={{ margin: "10px 0 0", fontSize: ".85rem" }}>Your groups</h3>
+            {!groups ? <p className="muted small">Loading…</p> : groups.length === 0 ? <p className="muted small">No groups yet — start one below.</p> : (
               <ul className="feed">{groups.map((g) => (
                 <li key={g.id}><span className="t">{g.lastPostAt ? relTime(g.lastPostAt) : "new"}</span>
-                  <span><Link href={`/groups/${g.id}`}><b>{g.name}</b></Link><br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}</span></span>
-                  <span>{g.requests > 0 && <Link href={`/groups/${g.id}`} className="badge-count" aria-label={`${g.requests} asking to join`}>{g.requests}</Link>}</span></li>))}</ul>
+                  <span><Link href={`/groups/${g.id}`}><b>{g.name}</b></Link><br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}{g.role === "admin" ? " · admin" : ""}</span></span>
+                  <span>{g.requests > 0 && <Link href={`/groups/${g.id}`} className="badge-count" aria-label={`${g.requests} asking to join`} data-testid="requests-badge">{g.requests}</Link>}</span></li>))}</ul>
             )}
             {pending.length > 0 && <p className="small muted" data-testid="pending">Waiting: {pending.map((p) => p.name).join(", ")}</p>}
-          </section>
 
-          <section className="card">
-            <h2 style={{ marginTop: 0 }}>Start a group</h2>
-            <form onSubmit={create} className="stack">
-              <div className="row"><input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="e.g. Manzini Market" data-testid="group-name" />
-                <button className="btn sm" disabled={name.trim().length < 2} data-testid="group-create"><Icon name="plus" size={16} />Create</button></div>
-              <div className="chips" role="group" aria-label="Group visibility">
-                <button type="button" className="chip" aria-pressed={listed} onClick={() => setListed(true)}>Public</button>
-                <button type="button" className="chip" aria-pressed={!listed} onClick={() => setListed(false)}>Private</button>
-              </div>
-              <p className="muted tiny" style={{ margin: 0 }}>{listed ? "Anyone can find and ask to join (you approve)." : "Only people with the invite link can join."}</p>
-            </form>
-            <form onSubmit={join} className="stack" style={{ marginTop: 10 }}>
-              <label className="small" htmlFor="ginv"><b>Join with an invite link</b></label>
-              <div className="row"><input id="ginv" value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="https://…/g/…" />
-                <button className="btn ghost sm" disabled={invite.trim().length < 12}>Join</button></div>
-            </form>
+            <details style={{ marginTop: 8 }} open={!groups || groups.length === 0}>
+              <summary className="small" style={{ cursor: "pointer", fontWeight: 600, color: "var(--accent)" }}><Icon name="plus" size={13} /> Start a group</summary>
+              <form onSubmit={create} className="stack" style={{ marginTop: 8 }}>
+                <div className="row"><input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="e.g. Manzini Market" aria-label="Group name" data-testid="group-name" />
+                  <button className="btn sm" disabled={name.trim().length < 2} data-testid="group-create">Create</button></div>
+                <div className="chips" role="group" aria-label="Group visibility">
+                  <button type="button" className="chip" aria-pressed={listed} onClick={() => setListed(true)}>Public</button>
+                  <button type="button" className="chip" aria-pressed={!listed} onClick={() => setListed(false)}>Private</button>
+                </div>
+                <p className="muted tiny" style={{ margin: 0 }}>{listed ? "Anyone can find and ask to join (you approve)." : "Only people with the invite link can join."}</p>
+              </form>
+            </details>
+            <details style={{ marginTop: 6 }}>
+              <summary className="small" style={{ cursor: "pointer", fontWeight: 600, color: "#2563EB" }}><Icon name="login" size={13} /> Join with an invite link</summary>
+              <form onSubmit={join} className="row" style={{ marginTop: 8 }}>
+                <input value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="https://…/g/…" aria-label="Invite link" />
+                <button className="btn ghost sm" disabled={invite.trim().length < 12}>Join</button>
+              </form>
+            </details>
           </section>
         </aside>
-
-        <main className="feed-main">
-          <section className="card" aria-labelledby="share-h">
-            <h2 id="share-h" className="sr-only">Share</h2>
-            <Composer placeholder="What&apos;s on your mind? Share how you feel…"
-              onPost={async (b) => { await api("/api/status", { body: b }); await load(); }} />
-          </section>
-
-          <section className="card" aria-labelledby="feed-h">
-            <h2 id="feed-h" style={{ marginTop: 0 }}>Latest</h2>
-            {timeline.length === 0 ? <p className="muted small">Nothing here yet. Share what&apos;s on your mind, or join a group.</p> : (
-              <div className="stack">
-                {timeline.map((p) => (
-                  <div key={p.id} className="post-wrap">
-                    <div className="spread" style={{ marginBottom: 4 }}><b>@{p.author.handle}</b>{!p.you && <button className={`btn sm${p.following ? " ghost" : ""}`} onClick={() => followHandle(p.author, p.following)}>{p.following ? "Following" : "Follow"}</button>}</div>
-                    <PostCard p={p} onChanged={load} />
-                    <Comments postId={p.id} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </main>
       </div>
+      {statusView && (
+        <StatusViewer
+          people={people.filter((p) => !p.you && p.items.length > 0)}
+          startHandle={statusView}
+          onClose={() => setStatusView(null)}
+        />
+      )}
     </div>
   );
 }

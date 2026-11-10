@@ -40,6 +40,9 @@ export class CallEngine {
   private busy = false;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  get localStream() { return this.local; }
+  get peerConnection() { return this.pc; }
+
   constructor(private id: string, private onChange: (s: EngineState, remote: MediaStream | null) => void) {}
 
   /** Replaces the listener (the page may re-mount) and replays the current state to it. */

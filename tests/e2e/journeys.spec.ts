@@ -164,14 +164,15 @@ test("Phone input (show my number): pasting a +international number switches the
 
 test("Passkey sign-in works on its own (no password)", async ({ page, context }) => {
   const o = await ownerOnboard(page);
+  await page.getByTestId("account-menu").click();          // account menu, then sign out
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL((u) => u.pathname === "/");        // sign-out redirects home once the request completes
   await expect(page.getByRole("link", { name: "Sign in" }).first()).toBeVisible();
   await context.clearCookies();
   await page.goto("/login");
   await page.getByRole("button", { name: "Sign in with a passkey" }).click();
-  await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByText(`@${o.handle}`)).toBeVisible();
+  await expect(page).toHaveURL(/\/groups/);                 // signed-in home is the feed
+  await expect(page.getByTestId("account-menu")).toContainText(`@${o.handle}`);
 });
 
 test("Accessibility: key pages have no serious or critical axe violations", async ({ page }) => {

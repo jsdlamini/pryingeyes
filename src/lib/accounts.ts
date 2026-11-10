@@ -242,6 +242,6 @@ export async function accountSummary(userId: string) {
     hasPassword: !!u.passwordHash, totp: !!totp?.confirmedAt, passkeys: pk,
     recoveryCodesLeft: rc.filter((r) => !r.usedAt).length,
     recovery: rec ? { availableAt: rec.availableAt } : null,
-    auditRetentionMonths: u.auditRetentionMonths, readReceipts: u.readReceipts, panicAt: u.panicAt,
+    auditRetentionMonths: u.auditRetentionMonths, readReceipts: u.readReceipts, doNotDisturb: u.doNotDisturb, avatarUrl: u.avatarUrl, panicAt: u.panicAt,
   };
 }

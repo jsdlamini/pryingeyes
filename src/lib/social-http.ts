@@ -4,7 +4,7 @@ import { notFound } from "./errors";
 
 export const uuid = (id: string) => { if (!/^[0-9a-f-]{36}$/i.test(id)) throw notFound(); return id; };
 export const AttachBody = z.object({ numberId: z.string().uuid().nullable().optional(), tier: z.union([z.literal(1), z.literal(2), z.literal(3)]), kind: z.enum(["standard", "day", "one"]).optional() }).nullable().optional();
-export const PostBody = z.object({ text: z.string().max(4000).default(""), attach: AttachBody });
+export const PostBody = z.object({ text: z.string().max(4000).default(""), attach: AttachBody, attachment: z.string().regex(/^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg|mp4|mov|m4v)$/).nullable().optional() });
 
 /** Attaching an app-only code needs only an 18+ account; a code backed by a phone number needs two-step sign-in. */
 export const authorFor = (req: Request, attach: { numberId?: string | null } | null | undefined) =>

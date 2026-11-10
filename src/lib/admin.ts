@@ -93,7 +93,8 @@ export async function decideAdminAction(adminId: string, id: string, approve: bo
   return { status: "executed", result };
 }
 
-/** Read-only view of every code (active and historical) a user owns. Admin only. */
+/** Read-only view of every code (active and historical) a user owns. Admin only.
+ *  Codes themselves are never shown to anyone — not even admins — only the 4-character prefix. */
 export async function listUserTokens(handle: string) {
   const u = await userByHandle(handle);
   const rows = await db().select().from(schema.tokens).where(eq(schema.tokens.ownerId, u.id)).orderBy(desc(schema.tokens.createdAt));
@@ -101,9 +102,7 @@ export async function listUserTokens(handle: string) {
     user: { id: u.id, handle: u.handle, email: u.email, status: u.status },
     tokens: rows.map((t) => ({
       id: t.id, label: t.label, class: t.class, tier: t.tier, status: t.status,
-      displayPrefix: t.displayPrefix, linkCode: t.linkCode, shortCode: t.shortCode,
-      link: t.linkCode ? `${env().APP_URL}/t/${groupCode(t.linkCode)}` : null,
-      short: t.shortCode ? groupCode(t.shortCode, 5) : null,
+      displayPrefix: t.displayPrefix,
       uses: t.uses, decodeBudget: t.decodeBudget, expiresAt: t.expiresAt, createdAt: t.createdAt,
     })),
   };

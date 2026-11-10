@@ -7,6 +7,10 @@ import { RecoveryCodes } from "@/components/RecoveryCodes";
 import { Icon } from "@/components/Icon";
 
 export default function Settings() {
+  // Passkey support is decided after mount: knowing it during the first render would
+  // make the server HTML differ from the client tree and force a full re-hydration.
+  const [canPasskey, setCanPasskey] = useState(false);
+  useEffect(() => { setCanPasskey(passkeysSupported()); }, []);
   const [me, setMe] = useState<any>(null); const [sessions, setSessions] = useState<any[]>([]); const [notes, setNotes] = useState<any[]>([]);
   const [codes, setCodes] = useState<string[] | null>(null);
   const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
@@ -49,7 +53,7 @@ export default function Settings() {
           {u.passkeys.length === 0 ? <p className="muted small">None yet.</p> : <ul>{u.passkeys.map((p: any) => (
             <li key={p.id} className="spread small"><span>{p.name} · added {relTime(p.createdAt)}{p.lastUsedAt ? ` · used ${relTime(p.lastUsedAt)}` : ""}</span>
               <button className="iconbtn sm danger" onClick={() => run(() => api(`/api/auth/passkey/${encodeURIComponent(p.id)}`, { method: "DELETE" }), "Passkey removed.")} aria-label={`Remove ${p.name}`} title="Remove"><Icon name="trash" size={16} /></button></li>))}</ul>}
-          {passkeysSupported() && <button className="btn ghost sm" onClick={() => run(async () => { const r = await registerPasskey("Passkey"); if (r.recoveryCodes) setCodes(r.recoveryCodes); }, "Passkey added.")}><Icon name="key" size={16} />Add a passkey</button>}
+          {canPasskey && <button className="btn ghost sm" onClick={() => run(async () => { const r = await registerPasskey("Passkey"); if (r.recoveryCodes) setCodes(r.recoveryCodes); }, "Passkey added.")}><Icon name="key" size={16} />Add a passkey</button>}
         </div>
         <div><b>Authenticator app</b> {u.totp ? <span className="status good">on</span> : <TotpSetup onDone={async (c) => { if (c) setCodes(c); await load(); }} />}</div>
         {(u.totp || u.passkeys.length > 0) && <div><b>Recovery codes</b> <span className="muted small">{u.recoveryCodesLeft} left</span>{" "}
@@ -80,6 +84,7 @@ export default function Settings() {
               {[1, 3, 6, 12, 18, 24].map((m) => <option key={m} value={m}>{m} month{m > 1 ? "s" : ""}</option>)}</select>
             <p className="hint">It's both a safety record and data about the people who contacted you.</p></div>
           <label className="check"><input type="checkbox" checked={u.readReceipts} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { readReceipts: e.target.checked } }), "Saved.")} /> Send read receipts in chats</label>
+          <label className="check"><input type="checkbox" checked={u.doNotDisturb} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { doNotDisturb: e.target.checked } }), "Saved.")} /> Do not disturb for calls</label>
         </div>
         <div className="row">
           <button className="btn ghost sm" onClick={() => run(async () => {

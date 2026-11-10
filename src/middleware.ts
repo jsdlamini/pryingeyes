@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { THEME_SCRIPT_HASH } from "@/lib/theme-script";
 
 /**
  * Security headers on every response. Strict CSP with a per-request nonce (Next.js applies it to
- * its own scripts). Turnstile's origin is allowed only when that CAPTCHA provider is configured.
+ * its own scripts). The theme bootstrap script is the one hand-written inline script; it is
+ * whitelisted by its SHA-256 hash (see src/lib/theme-script.ts). Turnstile's origin is allowed
+ * only when that CAPTCHA provider is configured.
  */
 /**
  * Development only: lets the phone app's web build (Expo, e.g. http://localhost:8081) call the API
@@ -30,11 +33,12 @@ export function middleware(req: NextRequest) {
   const turnstile = process.env.CAPTCHA_PROVIDER === "turnstile" ? " https://challenges.cloudflare.com" : "";
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}${turnstile}`,
+    `script-src 'self' 'nonce-${nonce}' '${THEME_SCRIPT_HASH}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}${turnstile}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    `connect-src 'self'${dev ? " ws: wss:" : ""}`,
+    `connect-src 'self' data: blob:${turnstile}${dev ? " ws: wss:" : ""}`,
+    `worker-src blob:${turnstile}`,
     `frame-src${turnstile || " 'none'"}`,
     "object-src 'none'",
     "base-uri 'none'",

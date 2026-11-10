@@ -10,6 +10,10 @@ import { PhoneInput, initialPhone, phoneBody, phoneValid, type PhoneValue } from
 type Me = { user: any; owner: { verified: boolean; ageConfirmed: boolean; mfa: boolean; sessionMfa: boolean } };
 
 export default function Onboarding() {
+  // Passkey support is decided after mount: knowing it during the first render would
+  // make the server HTML differ from the client tree and force a full re-hydration.
+  const [canPasskey, setCanPasskey] = useState(false);
+  useEffect(() => { setCanPasskey(passkeysSupported()); }, []);
   const [me, setMe] = useState<Me | null>(null);
   const [numbers, setNumbers] = useState<any[] | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
@@ -39,6 +43,9 @@ export default function Onboarding() {
     <div className="narrow" style={{ maxWidth: 640 }}>
       <h1>Add a phone number</h1>
       <p className="muted">Optional. Codes work without one: people message and call you in the app. Adding a number lets people you approve see it once, as a watermarked image. Because a number is stored, two-step sign-in comes first.</p>
+      <div className="alert info" style={{ marginTop: 8 }}>
+        <b>Codes are how people reach you.</b> A non-expiring code is created for you automatically — share it instead of your number. You can pause, rotate, or delete any code any time from <Link href="/dashboard">My codes</Link>.
+      </div>
       {err && <div className="alert err" role="alert">{err}</div>}
       <div className="card">{step(1, me.owner.verified, "Account verified")}
         {!me.owner.verified && <p className="muted small">Confirm your email or phone first.</p>}
@@ -47,7 +54,7 @@ export default function Onboarding() {
         {step(2, mfaDone, "Set up two-step sign-in")}
         {codes ? <RecoveryCodes codes={codes} onDone={() => setCodes(null)} /> : !mfaDone ? (
           <div className="stack">
-            {passkeysSupported() && <><button className="btn accent" onClick={passkey} disabled={busy}>Create a passkey (recommended)</button>
+            {canPasskey && <><button className="btn accent" onClick={passkey} disabled={busy}>Create a passkey (recommended)</button>
               <p className="hint">Uses your phone's or computer's screen lock. Nothing to type, and it can't be phished.</p></>}
             <TotpSetup onDone={async (c) => { if (c) setCodes(c); await load(); }} />
           </div>

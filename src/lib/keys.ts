@@ -46,7 +46,7 @@ export function keyProvider(): KeyProvider {
   const e = env();
   provider = new LocalKeyProvider(
     { version: e.MASTER_KEK_VERSION, key: Buffer.from(e.MASTER_KEK, "base64") },
-    JSON.parse(e.KEK_PREVIOUS),
+    JSON.parse(e.KEK_PREVIOUS?.trim() || "{}"),   // blank ("KEY_PREVIOUS=") means "no earlier keys"
   );
   return provider;
 }

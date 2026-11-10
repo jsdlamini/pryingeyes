@@ -1,21 +1,18 @@
 import { currentAuth } from "@/lib/server-auth";
 import { redirect } from "next/navigation";
 import { AuthTabs } from "@/components/AuthTabs";
-import { CodeEntry } from "@/components/CodeEntry";
+import { LandingPhrases } from "@/components/LandingPhrases";
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const a = await currentAuth();
   if (a && !a.session.mfaPending) redirect("/groups");
+  const { tab } = await searchParams;
+  const initialTab: "signin" | "signup" | "reach" = tab === "signup" || tab === "reach" ? tab : "signin";
   return (
     <div className="landing">
       <div className="landing-in">
-        <h1 className="landing-title">Share a code, not your phone number.</h1>
-        <AuthTabs />
-        <div className="landing-reach">
-          <h2 className="landing-sub">Reach someone</h2>
-          <p className="muted small">Enter the link or code they shared with you.</p>
-          <CodeEntry />
-        </div>
+        <LandingPhrases />
+        <AuthTabs initialTab={initialTab} />
       </div>
     </div>
   );

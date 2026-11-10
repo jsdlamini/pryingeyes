@@ -7,7 +7,7 @@ import { Status, Tier } from "@/components/Tier";
 import { TokenShare } from "@/components/TokenShare";
 import { Icon } from "@/components/Icon";
 
-type Tok = { id: string; label: string; class: string; tier: number; status: string; displayPrefix: string; linkCode: string | null; shortCode: string | null; link: string | null; short: string | null; expiresAt: string | null; uses: number; decodeBudget: number | null; rotationDue: boolean; appOnly: boolean; number: { hint: string; label: string } | null };
+type Tok = { id: string; label: string; class: string; tier: number; status: string; displayPrefix: string; linkCode: string | null; shortCode: string | null; link: string | null; short: string | null; expiresAt: string | null; uses: number; decodeBudget: number | null; rotationDue: boolean; appOnly: boolean; contacts: number; number: { hint: string; label: string } | null };
 type Summary = { stats: { activeTokens: number; contactsThisWeek: number; pendingApprovals: number; attemptsBlocked: number; numbers: number }; tokens: Tok[]; feed: FeedEntry[] };
 
 export function DashboardClient() {
@@ -16,8 +16,13 @@ export function DashboardClient() {
   const [share, setShare] = useState<{ link: string; short: string; label: string } | null>(null);
   const [copied, setCopied] = useState<string>("");
   const panicRef = useRef<HTMLDialogElement>(null);
-  const load = useCallback(() => api<Summary>("/api/dashboard").then(setD).catch((e) => setErr(errMsg(e))), []);
-  useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  const load = useCallback(() => { if (document.visibilityState !== "visible") return; return api<Summary>("/api/dashboard").then(setD).catch((e) => setErr(errMsg(e))); }, []);
+  useEffect(() => {
+    void load();
+    const id = setInterval(load, 15000);
+    document.addEventListener("visibilitychange", load);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", load); };
+  }, [load]);
 
   async function act(t: Tok, action: string, extra: Record<string, unknown> = {}) {
     setErr(""); setMsg("");
@@ -41,11 +46,15 @@ export function DashboardClient() {
   const s = d.stats;
   return (
     <div className="page">
-      <div className="spread" style={{ marginBottom: 14 }}>
-        <div><h1 style={{ marginBottom: 2 }}>My codes</h1><p className="muted small" style={{ margin: 0 }}>Share a code wherever you&apos;d have shared your number. People reach you in PryingEyes.</p></div>
+      <div className="page-head spread">
+        <div><p className="eyebrow"><Icon name="shield" size={12} /> Contact codes</p>
+          <h1 style={{ marginBottom: 2 }}>My codes</h1>
+          <p className="muted small" style={{ margin: 0 }}>Share a code wherever you&apos;d have shared your number. People reach you in PryingEyes.</p></div>
         <div className="row">
           <Link className="btn" href="/dashboard/tokens/new"><Icon name="plus" size={16} />New code</Link>
-          <button className="btn danger-ghost" onClick={() => panicRef.current?.showModal()} data-testid="panic"><Icon name="block" size={16} />Panic: revoke all</button>
+          <button className="btn danger-ghost" onClick={() => panicRef.current?.showModal()} disabled={s.activeTokens === 0}
+            title={s.activeTokens === 0 ? "You have no active codes to revoke" : "Revoke every code at once"} data-testid="panic">
+            <Icon name="block" size={16} />Panic: revoke all</button>
         </div>
       </div>
       {err && <div className="alert err" role="alert">{err}</div>}
@@ -68,7 +77,7 @@ export function DashboardClient() {
             </div>
           ) : (
             <table className="tbl">
-              <thead><tr><th>Label</th><th>Tier</th><th className="hide-sm">Code</th><th>Uses</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th>Label</th><th>Tier</th><th className="hide-sm">Code</th><th>Uses</th><th>Reached</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
               <tbody>
                 {d.tokens.map((t) => (
                   <tr key={t.id}>
@@ -84,16 +93,17 @@ export function DashboardClient() {
   )}
 </td>
                     <td>{t.uses}{t.decodeBudget ? `/${t.decodeBudget}` : ""}</td>
+                    <td>{t.contacts}</td>
                     <td><Status s={t.status} /></td>
                     <td>
-                      <details>
-                        <summary className="iconbtn sm" aria-label={`Actions for ${t.label}`} title="Actions"><Icon name="more" size={18} /></summary>
-                        <div className="stack" style={{ position: "absolute", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 8, padding: 8, zIndex: 5, minWidth: 160 }}>
-                          {t.status === "active" && <button className="btn ghost sm" onClick={() => act(t, "pause")}><Icon name="pause" size={15} />Pause</button>}
-                          {(t.status === "paused" || t.status === "frozen") && <button className="btn ghost sm" onClick={() => act(t, "resume")}><Icon name="play" size={15} />Resume</button>}
-                          {["active", "paused", "frozen", "expired"].includes(t.status) && <button className="btn ghost sm" onClick={() => act(t, "rotate")}><Icon name="refresh" size={15} />Replace with a new code</button>}
-                          {t.expiresAt && ["active", "paused", "frozen", "expired"].includes(t.status) && <button className="btn ghost sm" onClick={() => act(t, "extend", { hours: 48 })}>Extend 48 h</button>}
-                          {["active", "paused", "frozen"].includes(t.status) && <button className="btn danger-ghost sm" onClick={() => act(t, "revoke")}><Icon name="trash" size={15} />Revoke</button>}
+                      <details className="menu">
+                        <summary className="iconbtn sm" aria-label={`Actions for ${t.label}`} title="Actions"><Icon name="more" size={17} /></summary>
+                        <div className="pop menu-list">
+                          {t.status === "active" && <button className="plain-item" onClick={() => act(t, "pause")}><Icon name="pause" size={15} />Pause</button>}
+                          {(t.status === "paused" || t.status === "frozen") && <button className="plain-item" onClick={() => act(t, "resume")}><Icon name="play" size={15} />Resume</button>}
+                          {["active", "paused", "frozen", "expired"].includes(t.status) && <button className="plain-item" onClick={() => act(t, "rotate")}><Icon name="refresh" size={15} />Replace with a new code</button>}
+                          {t.expiresAt && ["active", "paused", "frozen", "expired"].includes(t.status) && <button className="plain-item" onClick={() => act(t, "extend", { hours: 48 })}><Icon name="clock" size={15} />Extend 48 h</button>}
+                          {["active", "paused", "frozen"].includes(t.status) && <button className="plain-item danger" onClick={() => act(t, "revoke")}><Icon name="trash" size={15} />Revoke</button>}
                         </div>
                       </details>
                     </td>

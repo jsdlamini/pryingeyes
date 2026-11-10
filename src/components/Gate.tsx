@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, errMsg } from "./api";
 import { Captcha } from "./Captcha";
@@ -39,6 +39,12 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
   async function run<T>(fn: () => Promise<T>) { setBusy(true); setErr(""); try { return await fn(); } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); } }
 
   const start = () => run(async () => setView(await api("/api/gate/start", { body: { code: p.code, captcha } })));
+  // Auto-continue once the human check passes — no need to tap Continue.
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (captcha && !view && !startedRef.current) { startedRef.current = true; void start(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captcha, view]);
   const sendOtp = () => run(async () => setView(await api(`/api/gate/${requestId}/otp`, { body: { action: "send" } })));
   const verifyOtp = (e: React.FormEvent) => { e.preventDefault(); return run(async () => {
     const r = await api(`/api/gate/${requestId}/otp`, { body: { action: "verify", code } });

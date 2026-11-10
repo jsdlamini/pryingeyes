@@ -65,7 +65,6 @@ async function insertToken(tx: Tx, ownerId: string, i: CreateInput, rotatedFromI
     try {
       const [t] = await tx.insert(schema.tokens).values({
         ownerId, numberId: i.numberId ?? null, linkHash: linkHash(linkCode), shortHash: shortHash(shortCode),
-        linkCode, shortCode,
         displayPrefix: linkCode.slice(0, 4), class: i.class, tier: i.tier, context: i.context ?? "other",
         label: i.label.trim(), expiresAt: ttl ? new Date(now + ttl * 3600_000) : null,
         decodeBudget: i.class === "disposable" ? 1 : i.decodeBudget ?? null,
@@ -236,23 +235,25 @@ export async function panicRevokeAll(ownerId: string) {
   });
 }
 
-/** Owner view of tokens. Codes are never retrievable: only the 4-character prefix. */
+/** Owner view of tokens. Codes are never retrievable after minting: only the 4-character prefix. */
 export async function listTokens(ownerId: string) {
   const rows = await db().select({
     t: schema.tokens, hint: schema.phoneNumbers.hint, numberLabel: schema.phoneNumbers.label,
   }).from(schema.tokens).leftJoin(schema.phoneNumbers, eq(schema.phoneNumbers.id, schema.tokens.numberId))
     .where(eq(schema.tokens.ownerId, ownerId)).orderBy(sql`${schema.tokens.createdAt} DESC`);
   const now = new Date();
+  const tids = rows.map((r) => r.t.id);
+  const contactRows = tids.length ? await db().select({ tokenId: schema.conversations.tokenId, n: sql<number>`count(distinct ${schema.conversations.callerId})` })
+    .from(schema.conversations).where(inArray(schema.conversations.tokenId, tids)).groupBy(schema.conversations.tokenId) : [];
+  const contacts = new Map(contactRows.map((r) => [r.tokenId, Number(r.n)]));
   return rows.map(({ t, hint, numberLabel }) => ({
     id: t.id, label: t.label, class: t.class, tier: t.tier, context: t.context,
     status: t.expiresAt && t.expiresAt <= now && LIVE_STATUSES.includes(t.status as any) ? "expired" : t.status,
     displayPrefix: t.displayPrefix,
-    linkCode: t.linkCode, shortCode: t.shortCode,
-    link: t.linkCode ? `${env().APP_URL}/t/${groupCode(t.linkCode)}` : null,
-    short: t.shortCode ? groupCode(t.shortCode, 5) : null,
     expiresAt: t.expiresAt, uses: t.uses, decodeBudget: t.decodeBudget,
     rotationDue: !!(t.rotationDueAt && t.rotationDueAt <= now), createdAt: t.createdAt,
     appOnly: !t.numberId,
+    contacts: contacts.get(t.id) ?? 0,
     number: t.numberId ? { id: t.numberId, hint, label: numberLabel } : null,
   }));
 }

@@ -1,11 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter";
-import "@fontsource/merriweather/300.css";
-import "@fontsource/merriweather/400.css";
-import "@fontsource/merriweather/700.css";
+import "@fontsource-variable/space-grotesk";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { StepUpProvider } from "@/components/StepUp";
+import { THEME_SCRIPT } from "@/lib/theme-script";
 
 export const metadata: Metadata = {
   title: { default: "PryingEyes", template: "%s · PryingEyes" },
@@ -13,14 +12,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
   referrer: "no-referrer",
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#F6EEF2" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: [
+  { media: "(prefers-color-scheme: light)", color: "#EEF4F9" },
+  { media: "(prefers-color-scheme: dark)", color: "#081120" },
+] };
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('pe-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <a className="skip" href="#main">Skip to content</a>
         <StepUpProvider>
           <Shell />

@@ -4,6 +4,8 @@ Share a code, not your phone number. Owners publish an opaque link, QR code or s
 
 **Safe groups and statuses.** People don't have to post their number in a group or on their status to be reachable. Phone numbers, email addresses and messaging links are refused there, even disguised (spaced digits, "seven six one…", "name at gmail dot com"). Instead the author attaches a **contact code**: others tap it, and PryingEyes opens straight on the gate with the code already filled in. That happens in the phone app if it's installed, otherwise on the website. Anyone can start a group and anyone can find one and ask to join, but only the group's creator or the admins they appoint let people in. Members see each other by handle only, and statuses last 24 hours. Codes can be shared in groups, statuses and private chats: standing ones, 24-hour ones, or one-person codes that stop after a single use.
 
+**The "Sonar" redesign (v0.11).** The site now opens on a **feed** with 24-hour status rings, a **People** page for finding and following the users you cross paths with, threaded comments of any depth, a notifications bell, and a grouped top bar (Feed · People · Chats · Codes). The pink palette is replaced by a deep-navy + signal-cyan identity in light and dark mode, with compact spacing, icon-led actions and WCAG-AA contrast. See [`docs/RELEASE-0.11.0.md`](docs/RELEASE-0.11.0.md) for everything that changed (including real security and privacy fixes) and [`docs/DESIGN-TOUR.md`](docs/DESIGN-TOUR.md) for a screen-by-screen tour.
+
 Built from *PryingEyes — Development Agent Prompt v1.1*. Everything in Phase 1 is implemented and tested. See [`docs/FINAL_REPORT.md`](docs/FINAL_REPORT.md) for the milestone report and test results.
 
 ---

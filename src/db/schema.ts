@@ -50,6 +50,8 @@ export const users = pgTable("users", {
   ageConfirmedAt: timestamp("age_confirmed_at", { withTimezone: true }),
   auditRetentionMonths: integer("audit_retention_months").notNull().default(12),
   readReceipts: boolean("read_receipts").notNull().default(true),
+  doNotDisturb: boolean("do_not_disturb").notNull().default(false),
+  avatarUrl: text("avatar_url"),
   panicAt: timestamp("panic_at", { withTimezone: true }),
   totpLastStep: bigint("totp_last_step", { mode: "number" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -158,8 +160,6 @@ export const tokens = pgTable("tokens", {
   numberId: uuid("number_id").references(() => phoneNumbers.id, { onDelete: "cascade" }),
   linkHash: text("link_hash").notNull(),
   shortHash: text("short_hash").notNull(),
-  linkCode: text("link_code"),
-  shortCode: text("short_code"),
   displayPrefix: text("display_prefix").notNull(),
   class: tokenClass("class").notNull(),
   tier: integer("tier").notNull(),
@@ -249,11 +249,23 @@ export const conversations = pgTable("conversations", {
   index("conv_caller_idx").on(t.callerId),
 ]);
 
+export const reactions = pgTable("reactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  targetId: uuid("target_id").notNull(),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("reaction_uq").on(t.userId, t.kind, t.targetId, t.emoji)]);
+
 export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   senderId: uuid("sender_id").references(() => users.id, { onDelete: "set null" }),
   ciphertext: bytea("ciphertext").notNull(),
+  attachment: text("attachment"),
+  attachmentKind: text("attachment_kind"),
+  viewOnce: boolean("view_once").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   readAt: timestamp("read_at", { withTimezone: true }),
@@ -277,6 +289,7 @@ export const comments = pgTable("comments", {
   authorId: uuid("author_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   bodyEnc: bytea("body_enc").notNull(),
   parentId: uuid("parent_id").references((): AnyPgColumn => comments.id, { onDelete: "cascade" }),
+  attachment: text("attachment"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("comments_post_idx").on(t.postId, t.createdAt)]);
 
@@ -322,6 +335,7 @@ export const posts = pgTable("posts", {
   bodyEnc: bytea("body_enc").notNull(),
   tokenId: uuid("token_id").references(() => tokens.id, { onDelete: "set null" }),
   codeEnc: bytea("code_enc"),                          // the attached contact code (short + link form)
+  attachment: text("attachment"),                      // uploaded image URL (/uploads/...)
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
 }, (t) => [

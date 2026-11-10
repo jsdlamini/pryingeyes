@@ -73,6 +73,7 @@ test("Groups: numbers are refused, contact codes are shared, and tapping one ope
 
   // Tapping the code opens the gate with the code already in place: no copy and paste.
   await m.getByRole("link", { name: "Manzini Market" }).click();
+  await expect(m.getByRole("heading", { name: "Manzini Market" })).toBeVisible();   // the group page is up before we tap its code
   await m.getByTestId("code-card").click();
   await expect(m).toHaveURL(/\/t\/[0-9A-Z]+/);
   await expect(m.getByText("You're trying to reach")).toBeVisible();

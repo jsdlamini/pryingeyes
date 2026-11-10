@@ -2,23 +2,38 @@ import Link from "next/link";
 import { currentAuth } from "@/lib/server-auth";
 import { NavLinks } from "./NavLinks";
 import { IncomingCall } from "./calls/IncomingCall";
+import { BottomNav } from "./BottomNav";
 import { Icon } from "./Icon";
+import { ThemeToggle } from "./ThemeToggle";
 
 export async function Shell() {
   const a = await currentAuth();
   const signedIn = a && !a.session.mfaPending;
   const roles = a?.user.roles ?? [];
   return (
-    <header className="topbar">
-      <div className="in">
-        <Link href={signedIn ? "/dashboard" : "/"} className="logo"><Icon name="mark" size={24} /><span>Prying<b>Eyes</b></span></Link>
-        {signedIn ? (
-          <NavLinks handle={a!.user.handle} moderator={roles.includes("moderator") || roles.includes("admin")} admin={roles.includes("admin")} />
-        ) : (
-          <nav className="nav" aria-label="Main"><span style={{ flex: 1 }} /><Link href="/login">Sign in</Link><Link href="/signup">Create account</Link></nav>
-        )}
-      </div>
-      {signedIn && <IncomingCall />}
-    </header>
+    <>
+      <header className="topbar">
+        <div className="in">
+          <Link href={signedIn ? "/groups" : "/"} className="logo">
+            <span className="mark-badge"><Icon name="mark" size={19} /></span>
+            <span>Prying<b>Eyes</b></span>
+          </Link>
+          {signedIn ? (
+            <NavLinks handle={a!.user.handle} moderator={roles.includes("moderator") || roles.includes("admin")} admin={roles.includes("admin")} />
+          ) : (
+            <nav className="nav" aria-label="Main">
+              <span className="spacer" />
+              <span className="nav-right">
+                <Link href="/?tab=signin">Sign in</Link>
+                <Link className="btn sm" href="/?tab=signup">Create account</Link>
+                <ThemeToggle />
+              </span>
+            </nav>
+          )}
+        </div>
+        {signedIn && <IncomingCall />}
+      </header>
+      {signedIn && <BottomNav />}
+    </>
   );
 }

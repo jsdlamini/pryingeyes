@@ -24,12 +24,14 @@ import { assertNoContactInfo } from "./guard";
 import { createToken, expireIfDue, LIVE_STATUSES } from "./tokens";
 import { createReport, REPORT_REASONS } from "./moderation";
 import { notify } from "./notify";
+import { reactionsFor } from "./reactions";
 import { log } from "./log";
 
 export const INVITE_CHARS = 12;               // 60 bits
 export const MAX_GROUP_MEMBERS = 1000;
 export const STATUS_HOURS = 24;
 const POST_MAX = 1000;
+const ATTACH_RE = /^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg|mp4|mov|m4v)$/;
 
 type Group = typeof schema.groups.$inferSelect;
 type Post = typeof schema.posts.$inferSelect;
@@ -98,6 +100,13 @@ async function handles(ids: string[]) {
   const m = new Map<string, string>();
   const uniq = [...new Set(ids)];
   if (uniq.length) for (const u of await db().select({ id: schema.users.id, h: schema.users.handle }).from(schema.users).where(inArray(schema.users.id, uniq))) m.set(u.id, u.h);
+  return m;
+}
+
+async function avatars(ids: string[]): Promise<Map<string, string | null>> {
+  const m = new Map<string, string | null>();
+  const uniq = [...new Set(ids)];
+  if (uniq.length) for (const u of await db().select({ id: schema.users.id, a: schema.users.avatarUrl }).from(schema.users).where(inArray(schema.users.id, uniq))) m.set(u.id, u.a);
   return m;
 }
 
@@ -380,16 +389,16 @@ async function codeView(p: Post, tokens: Map<string, typeof schema.tokens.$infer
 
 // ---- posts -----------------------------------------------------------------
 
-function cleanText(text: string, hasCode: boolean) {
+function cleanText(text: string, hasOther: boolean) {
   const t = (text ?? "").trim();
-  if (!t && !hasCode) throw badRequest("empty_post", "Write something or attach your contact code.");
+  if (!t && !hasOther) throw badRequest("empty_post", "Write something or attach media.");
   if (t.length > POST_MAX) throw badRequest("post_too_long", `Keep posts under ${POST_MAX} characters.`);
   return t;
 }
 
-export async function createPost(authorId: string, i: { groupId: string | null; text: string; attach?: Attach | null }) {
+export async function createPost(authorId: string, i: { groupId: string | null; text: string; attach?: Attach | null; attachment?: string | null }) {
   let text: string;
-  try { text = cleanText(i.text, !!i.attach); assertNoContactInfo(text, i.groupId ? "post" : "status"); }
+  try { text = cleanText(i.text, !!(i.attach || i.attachment)); assertNoContactInfo(text, i.groupId ? "post" : "status"); }
   catch (e) {
     if ((e as { code?: string }).code === "contact_info_detected") {
       await audit({ type: "post.rejected_contact", actorId: authorId, subjectType: i.groupId ? "group" : "status", subjectId: i.groupId });
@@ -405,11 +414,13 @@ export async function createPost(authorId: string, i: { groupId: string | null; 
   if (!b.allowed) throw tooMany(b.retryAfter, "You're posting a lot. Try again in a little while.");
 
   const code = i.attach ? await codeFor(authorId, place, i.attach) : null;
+  const attachment = i.attachment && ATTACH_RE.test(i.attachment) ? i.attachment : null;
   const id = crypto.randomUUID();
   await db().insert(schema.posts).values({
     id, groupId: place.groupId, authorId, bodyEnc: await encryptForUser(authorId, text, `post:${id}`),
     tokenId: code?.tokenId ?? null,
     codeEnc: code ? await encryptForUser(authorId, JSON.stringify({ short: code.short, link: code.link, tier: i.attach!.tier }), `postcode:${id}`) : null,
+    attachment,
     expiresAt: place.groupId ? null : new Date(Date.now() + STATUS_HOURS * 3600_000),
   });
   if (place.groupId) await db().update(schema.groups).set({ lastPostAt: new Date() }).where(eq(schema.groups.id, place.groupId));
@@ -419,18 +430,25 @@ export async function createPost(authorId: string, i: { groupId: string | null; 
 
 async function present(viewerId: string, rows: Post[], adminOf: Set<string>) {
   const h = await handles(rows.map((r) => r.authorId));
+  const av = await avatars(rows.map((r) => r.authorId));
   const tids = rows.map((r) => r.tokenId).filter(Boolean) as string[];
   const tokens = new Map<string, typeof schema.tokens.$inferSelect>();
   if (tids.length) for (const t of await db().select().from(schema.tokens).where(inArray(schema.tokens.id, tids))) tokens.set(t.id, t);
+  const cc = new Map<string, number>();
+  if (rows.length) for (const r of await db().select({ postId: schema.comments.postId, n: count() }).from(schema.comments).where(inArray(schema.comments.postId, rows.map((p) => p.id))).groupBy(schema.comments.postId)) cc.set(r.postId, r.n);
+  const reacts = rows.length ? await reactionsFor(viewerId, "post", rows.map((p) => p.id)) : new Map();
   const out = [];
   for (const p of rows) {
     let text = "";
     try { text = await decryptForUser(p.authorId, p.bodyEnc, `post:${p.id}`); } catch { continue; }
     out.push({
       id: p.id, at: p.createdAt, expiresAt: p.expiresAt, text,
-      author: { id: p.authorId, handle: h.get(p.authorId) ?? "someone" },
+      author: { id: p.authorId, handle: h.get(p.authorId) ?? "someone", avatar: av.get(p.authorId) ?? null },
       mine: p.authorId === viewerId,
       canDelete: p.authorId === viewerId || (!!p.groupId && adminOf.has(p.groupId)),
+      commentCount: cc.get(p.id) ?? 0,
+      attachment: p.attachment,
+      reactions: reacts.get(p.id) ?? [],
       code: await codeView(p, tokens),
     });
   }
@@ -449,6 +467,8 @@ export async function groupPosts(userId: string, groupId: string, o: { before?: 
 /** Status updates from the last 24 hours by people who share a group with this user. Own first. */
 /** Follow another user so their status updates appear in your feed. */
 export async function followUser(followerId: string, targetHandle: string) {
+  const b = await hit(`follow:${followerId}`, 100, 3600);
+  if (!b.allowed) throw tooMany(b.retryAfter, "That's a lot of follows for one hour. Try again later.");
   const u = await userByHandleLocal(targetHandle);
   if (u.id === followerId) throw badRequest("self_follow", "You can’t follow yourself.");
   await db().insert(schema.follows).values({ followerId, followedId: u.id }).onConflictDoNothing();
@@ -461,22 +481,101 @@ export async function unfollowUser(followerId: string, targetHandle: string) {
   return { following: false };
 }
 
+/** People the user has blocked (so they can unblock them). */
+export async function listBlocked(userId: string) {
+  const rows = await db().select({ id: schema.blocks.blockedId, at: schema.blocks.createdAt })
+    .from(schema.blocks).where(eq(schema.blocks.blockerId, userId))
+    .orderBy(desc(schema.blocks.createdAt)).limit(200);
+  const h = await handles(rows.map((r) => r.id));
+  return rows.map((r) => ({ id: r.id, handle: h.get(r.id) ?? "someone", at: r.at }));
+}
+
+export async function unblockUser(userId: string, targetHandle: string) {
+  const u = await userByHandleLocal(targetHandle);
+  await db().delete(schema.blocks).where(and(eq(schema.blocks.blockerId, userId), eq(schema.blocks.blockedId, u.id)));
+  return { unblocked: true };
+}
+
+export type PersonCard = { id: string; handle: string; following: boolean; sharesGroups: number; followers: number; liveStatus: boolean; latestAt: string | null };
+
+/**
+ * People the viewer may want to follow. Suggestions are the people you already cross paths
+ * with: shared groups, your followers, and the people you follow. A handle search can find
+ * any user (you can only search for a handle you already know), but blocked users and the
+ * viewer themselves are never listed.
+ */
+export async function discoverPeople(viewerId: string, q: string) {
+  const b = await hit(`people:search:${viewerId}`, 120, 3600);
+  if (!b.allowed) throw tooMany(b.retryAfter, "That's a lot of searching. Give it a minute.");
+
+  const search = q.trim().toLowerCase().replace(/^@+/, "");
+  const [blocked, following, shared, followerRows, live] = await Promise.all([
+    blockedWith(viewerId),
+    followingIds(viewerId),
+    db().select({ id: schema.groupMembers.userId, groups: count() }).from(schema.groupMembers)
+      .where(inArray(schema.groupMembers.groupId,
+        db().select({ g: schema.groupMembers.groupId }).from(schema.groupMembers).where(eq(schema.groupMembers.userId, viewerId))))
+      .groupBy(schema.groupMembers.userId),
+    db().select({ id: schema.follows.followerId, n: count() }).from(schema.follows).groupBy(schema.follows.followerId),
+    db().select({ id: schema.posts.authorId, at: sql<string>`max(${schema.posts.createdAt})`.as("at") }).from(schema.posts)
+      .where(and(isNull(schema.posts.groupId), gt(schema.posts.expiresAt, new Date())))
+      .groupBy(schema.posts.authorId),
+  ]);
+
+  const sharedCount = new Map(shared.map((r) => [r.id, Number(r.groups)]));
+  const followerCount = new Map(followerRows.map((r) => [r.id, Number(r.n)]));
+  const liveAt = new Map(live.map((r) => [r.id, r.at]));
+  const myFollowers = new Set((await db().select({ id: schema.follows.followerId }).from(schema.follows)
+    .where(eq(schema.follows.followedId, viewerId))).map((r) => r.id));
+
+  let rows: { id: string; handle: string }[];
+  if (search.length >= 2) {
+    // Handle search: you can look up anyone whose handle you know.
+    rows = await db().select({ id: schema.users.id, handle: schema.users.handle }).from(schema.users)
+      .where(sql`lower(${schema.users.handle}) like ${search + "%"}`).orderBy(asc(schema.users.handle)).limit(24);
+  } else {
+    // Suggestions: shared groups ∪ people who follow you ∪ people you follow.
+    const ids = new Set<string>([...sharedCount.keys(), ...myFollowers, ...following]);
+    ids.delete(viewerId);
+    if (!ids.size) return [] as PersonCard[];
+    rows = await db().select({ id: schema.users.id, handle: schema.users.handle }).from(schema.users)
+      .where(inArray(schema.users.id, [...ids])).orderBy(asc(schema.users.handle)).limit(200);
+  }
+
+  const cards = rows
+    .filter((u) => u.id !== viewerId && !blocked.has(u.id))
+    .map((u): PersonCard => ({
+      id: u.id, handle: u.handle, following: following.has(u.id),
+      sharesGroups: sharedCount.get(u.id) ?? 0, followers: followerCount.get(u.id) ?? 0,
+      liveStatus: liveAt.has(u.id), latestAt: liveAt.get(u.id) ?? null,
+    }));
+  // Suggestions put familiar faces (shared groups, then your followers) on top; a search stays alphabetical.
+  if (!search) cards.sort((a, b2) => (b2.sharesGroups - a.sharesGroups) || ((myFollowers.has(b2.id) ? 1 : 0) - (myFollowers.has(a.id) ? 1 : 0)) || (b2.followers - a.followers));
+  return cards.slice(0, 24);
+}
+
 async function userByHandleLocal(handle: string) {
   const [u] = await db().select().from(schema.users).where(sql`lower(${schema.users.handle}) = ${handle.toLowerCase()}`);
   if (!u) throw notFound("user_not_found", "No user with that handle.");
   return u;
 }
 
+/**
+ * Status updates from the last 24 hours, visible only to people you share a group with and
+ * people who follow you (plus your own). Strangers see nothing.
+ */
 export async function statusFeed(userId: string) {
-  // Status updates are public by default: every signed-in user sees every live status,
-  // minus people they've blocked. Following just marks which authors you track.
   const blocked = await blockedWith(userId);
   const following = await followingIds(userId);
+  const visible = new Set(await circle(userId));            // self + shared groups
+  for (const id of following) visible.add(id);              // + people I follow
+  if (!visible.size) return [];
   const rows = await db().select().from(schema.posts)
-    .where(and(isNull(schema.posts.groupId), gt(schema.posts.expiresAt, new Date())))
+    .where(and(isNull(schema.posts.groupId), gt(schema.posts.expiresAt, new Date()),
+      inArray(schema.posts.authorId, [...visible])))
     .orderBy(desc(schema.posts.createdAt)).limit(300);
   const items = await present(userId, rows, new Set());
-  const by = new Map<string, { author: { id: string; handle: string }; you: boolean; following: boolean; latestAt: Date; items: typeof items }>();
+  const by = new Map<string, { author: { id: string; handle: string; avatar: string | null }; you: boolean; following: boolean; latestAt: Date; items: typeof items }>();
   for (const it of items) {
     if (blocked.has(it.author.id)) continue;
     const e = by.get(it.author.id) ?? { author: it.author, you: it.mine, following: following.has(it.author.id), latestAt: it.at, items: [] };
@@ -494,15 +593,18 @@ async function visiblePost(userId: string, postId: string) {
     if (!role) throw notFound("post_not_found", "This post isn't available.");
     return { p, admin: role === "admin" };
   }
-  if (p.authorId !== userId && (!(await circle(userId)).includes(p.authorId) || !p.expiresAt || p.expiresAt <= new Date())) {
+  // Status updates are public: any signed-in user can see (and therefore flag/comment on) a live one.
+  if (p.authorId !== userId && (!p.expiresAt || p.expiresAt <= new Date())) {
     throw notFound("post_not_found", "This post isn't available.");
   }
   return { p, admin: false };
 }
 
 /** Post a comment (or a reply when parentId is set) on any visible post. */
-export async function createComment(authorId: string, postId: string, text: string, parentId?: string | null) {
-  const t = cleanText(text, false);
+export async function createComment(authorId: string, postId: string, text: string, parentId?: string | null, attachment?: string | null) {
+  const b = await hit(`comment:${authorId}`, 60, 3600);
+  if (!b.allowed) throw tooMany(b.retryAfter, "You've commented a lot this hour. Give it a rest and try again shortly.");
+  const t = cleanText(text, !!attachment);
   assertNoContactInfo(t, "comment");
   const { p } = await visiblePost(authorId, postId);
   if (parentId) {
@@ -510,7 +612,8 @@ export async function createComment(authorId: string, postId: string, text: stri
     if (!parent || parent.postId !== p.id) throw notFound("comment_not_found", "That comment isn’t here.");
   }
   const id = crypto.randomUUID();
-  await db().insert(schema.comments).values({ id, postId, authorId, parentId: parentId ?? null, bodyEnc: await encryptForUser(authorId, t, `comment:${id}`) });
+  const att = attachment && ATTACH_RE.test(attachment) ? attachment : null;
+  await db().insert(schema.comments).values({ id, postId, authorId, parentId: parentId ?? null, bodyEnc: await encryptForUser(authorId, t, `comment:${id}`), attachment: att });
   await audit({ type: "post.commented", actorId: authorId, subjectType: "post", subjectId: postId });
   return { id };
 }
@@ -520,11 +623,13 @@ export async function listComments(viewerId: string, postId: string) {
   await visiblePost(viewerId, postId);
   const rows = await db().select().from(schema.comments).where(eq(schema.comments.postId, postId)).orderBy(asc(schema.comments.createdAt)).limit(500);
   const h = await handles(rows.map((r) => r.authorId));
+  const av = await avatars(rows.map((r) => r.authorId));
+  const reacts = rows.length ? await reactionsFor(viewerId, "comment", rows.map((c) => c.id)) : new Map();
   const out = [];
   for (const c of rows) {
     let text = "";
     try { text = await decryptForUser(c.authorId, c.bodyEnc, `comment:${c.id}`); } catch { continue; }
-    out.push({ id: c.id, parentId: c.parentId, at: c.createdAt, text, author: { id: c.authorId, handle: h.get(c.authorId) ?? "someone" }, mine: c.authorId === viewerId });
+    out.push({ id: c.id, parentId: c.parentId, at: c.createdAt, text, attachment: c.attachment, reactions: reacts.get(c.id) ?? [], author: { id: c.authorId, handle: h.get(c.authorId) ?? "someone", avatar: av.get(c.authorId) ?? null }, mine: c.authorId === viewerId });
   }
   return out;
 }
@@ -534,6 +639,19 @@ export async function deletePost(userId: string, postId: string) {
   if (p.authorId !== userId && !admin) throw forbidden("not_yours", "You can only delete your own posts.");
   await db().delete(schema.posts).where(eq(schema.posts.id, postId));
   await audit({ type: "post.deleted", actorId: userId, subjectType: "post", subjectId: postId, payload: { byAdmin: p.authorId !== userId } });
+}
+
+/** Edit your own post (text only; the attachment and contact code stay as they are). */
+export async function updatePost(userId: string, postId: string, text: string) {
+  const [p] = await db().select().from(schema.posts).where(eq(schema.posts.id, postId));
+  if (!p) throw notFound("post_not_found", "This post isn't available.");
+  if (p.authorId !== userId) throw forbidden("not_yours", "You can only edit your own posts.");
+  if (p.expiresAt && p.expiresAt <= new Date()) throw badRequest("post_expired", "This status has expired.");
+  const t = cleanText(text, !!p.codeEnc);
+  assertNoContactInfo(t, p.groupId ? "post" : "status");
+  await db().update(schema.posts).set({ bodyEnc: await encryptForUser(userId, t, `post:${p.id}`) }).where(eq(schema.posts.id, postId));
+  await audit({ type: "post.edited", actorId: userId, subjectType: "post", subjectId: postId });
+  return { id: postId };
 }
 
 export async function reportPost(userId: string, postId: string, reason: typeof REPORT_REASONS[number], details = "", block = false) {

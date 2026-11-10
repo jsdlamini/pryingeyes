@@ -91,8 +91,8 @@ async function participantCall(userId: string, id: string) {
 
 // ---- lifecycle ---------------------------------------------------------------------------
 
-/** Starts a call from a gate request (or from a chat that still has a valid gate request). */
-export async function startAppCall(o: { requestId: string; token: Token; caller: User }) {
+/** Shared call-starting logic: one active call per person, one line per callee. */
+async function startCallBetween(o: { caller: User; ownerId: string; tokenId: string | null; requestId: string | null; label: string }) {
   const b = await hit(`call:start:${o.caller.id}`, 10, 3600);
   if (!b.allowed) throw tooMany(b.retryAfter, "You've started a lot of calls. Please wait a little.");
   await sweepCalls(true);
@@ -100,23 +100,34 @@ export async function startAppCall(o: { requestId: string; token: Token; caller:
     .where(and(inArray(schema.appCalls.status, ACTIVE), or(eq(schema.appCalls.callerId, o.caller.id), eq(schema.appCalls.ownerId, o.caller.id))));
   if (mine.length) throw conflict("already_in_call", "You're already in a call. End it first.");
 
-  // One line per owner: a lock stops two simultaneous callers both getting through.
-  const lock = await redis().set(`call:line:${o.token.ownerId}`, o.caller.id, "EX", 5, "NX");
-  const ownerBusy = !lock || (await db().select({ id: schema.appCalls.id }).from(schema.appCalls)
-    .where(and(eq(schema.appCalls.ownerId, o.token.ownerId), inArray(schema.appCalls.status, ACTIVE)))).length > 0;
+  // One line per callee: a lock stops two simultaneous callers both getting through.
+  const lock = await redis().set(`call:line:${o.ownerId}`, o.caller.id, "EX", 5, "NX");
+  const [callee] = await db().select({ dnd: schema.users.doNotDisturb }).from(schema.users).where(eq(schema.users.id, o.ownerId));
+  const ownerBusy = !lock || callee?.dnd === true || (await db().select({ id: schema.appCalls.id }).from(schema.appCalls)
+    .where(and(eq(schema.appCalls.ownerId, o.ownerId), inArray(schema.appCalls.status, ACTIVE)))).length > 0;
   try {
     const now = new Date();
     const [call] = await db().insert(schema.appCalls).values({
-      requestId: o.requestId, tokenId: o.token.id, ownerId: o.token.ownerId, callerId: o.caller.id, label: o.token.label,
+      requestId: o.requestId, tokenId: o.tokenId, ownerId: o.ownerId, callerId: o.caller.id, label: o.label,
       status: ownerBusy ? "busy" : "ringing", ...(ownerBusy ? { endedAt: now, endedBy: "system" } : {}),
     }).returning();
-    await audit({ type: ownerBusy ? "call.busy" : "call.started", actorId: o.caller.id, ownerId: o.token.ownerId, subjectType: "call", subjectId: call.id });
+    await audit({ type: ownerBusy ? "call.busy" : "call.started", actorId: o.caller.id, ownerId: o.ownerId, subjectType: "call", subjectId: call.id });
     if (ownerBusy) await missedNotice(call, "busy");
     else await notifyIncoming(call, o.caller.handle);
     return call;
   } finally {
-    if (lock) await redis().del(`call:line:${o.token.ownerId}`);
+    if (lock) await redis().del(`call:line:${o.ownerId}`);
   }
+}
+
+/** Starts a call from a gate request. */
+export async function startAppCall(o: { requestId: string; token: Token; caller: User }) {
+  return startCallBetween({ caller: o.caller, ownerId: o.token.ownerId, tokenId: o.token.id, requestId: o.requestId, label: o.token.label });
+}
+
+/** Call someone you already have a chat with — no fresh gate pass needed. */
+export async function startChatCall(o: { caller: User; calleeId: string; label: string }) {
+  return startCallBetween({ caller: o.caller, ownerId: o.calleeId, tokenId: null, requestId: null, label: o.label });
 }
 
 /**

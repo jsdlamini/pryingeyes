@@ -71,6 +71,55 @@
       "when": 1793978000000,
       "tag": "0009_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793979000000,
+      "tag": "0010_no_token_plaintext",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794056552183,
+      "tag": "0011_posts_attachment",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794056552184,
+      "tag": "0012_comments_attachment",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794231063756,
+      "tag": "0013_message_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794233430374,
+      "tag": "0014_reactions",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794237926456,
+      "tag": "0015_do_not_disturb",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794239020900,
+      "tag": "0016_avatar",
+      "breakpoints": true
     }
   ]
 }

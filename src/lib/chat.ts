@@ -65,6 +65,16 @@ export async function participantConv(userId: string, convId: string) {
   return c;
 }
 
+/** Both parties see the same safety number for a conversation — compare it to confirm no one is in the middle. */
+export async function safetyNumber(userId: string, convId: string) {
+  const c = await participantConv(userId, convId);
+  const key = await convKey(c);
+  const fp = crypto.createHmac("sha256", key).update(`safety:${c.id}`).digest();
+  let digits = "";
+  for (const b of fp) digits += String(b % 100).padStart(2, "0");
+  return { safety: digits.slice(0, 60).replace(/(\d{5})(?=\d)/g, "$1 ").trim() };
+}
+
 async function isBlockedEitherWay(a: string, b: string) {
   const r = await db().select().from(schema.blocks).where(or(
     and(eq(schema.blocks.blockerId, a), eq(schema.blocks.blockedId, b)),
@@ -80,10 +90,13 @@ export async function chatPartnerHandle(userId: string, convId: string) {
   return u?.h ?? "someone";
 }
 
-export async function sendMessage(userId: string, convId: string, text: string) {
+const MEDIA_RE = /^\/uploads\/[0-9a-f-]{36}\.(jpg|png|webp|gif|webm|m4a|mp3|ogg)$/;
+
+export async function sendMessage(userId: string, convId: string, text: string, opts: { attachment?: string | null; attachmentKind?: string | null; viewOnce?: boolean } = {}) {
   const c = await participantConv(userId, convId);
   const clean = (text ?? "").replace(/\u0000/g, "").trim();
-  if (!clean) throw badRequest("empty", "Write a message first.");
+  const attachment = opts.attachment && MEDIA_RE.test(opts.attachment) ? opts.attachment : null;
+  if (!clean && !attachment) throw badRequest("empty", "Write a message or attach something.");
   if (clean.length > 2000) throw badRequest("too_long", "Messages can be up to 2,000 characters.");
   if (c.closedAt) throw forbidden("closed", "This conversation is closed.");
   const other = c.ownerId === userId ? c.callerId : c.ownerId;
@@ -98,12 +111,23 @@ export async function sendMessage(userId: string, convId: string, text: string) 
   const ciphertext = aesGcmEncrypt(await convKey(c), Buffer.from(clean, "utf8"), Buffer.from(`msg:${id}`));
   const now = new Date();
   await db().insert(schema.messages).values({
-    id, conversationId: c.id, senderId: userId, ciphertext, createdAt: now,
+    id, conversationId: c.id, senderId: userId, ciphertext, attachment, attachmentKind: attachment ? (opts.attachmentKind ?? "image") : null, viewOnce: attachment ? !!opts.viewOnce : false, createdAt: now,
     expiresAt: c.disappearSeconds ? new Date(now.getTime() + c.disappearSeconds * 1000) : null,
   });
   await db().update(schema.conversations).set({ lastMessageAt: now }).where(eq(schema.conversations.id, c.id));
   await notifyChat(c, userId, "chat_message");
   return { id, createdAt: now };
+}
+
+/** The recipient opens a view-once attachment once; the server clears it after. */
+export async function consumeMessage(userId: string, convId: string, messageId: string) {
+  const c = await participantConv(userId, convId);
+  const [m] = await db().select().from(schema.messages).where(and(eq(schema.messages.id, messageId), eq(schema.messages.conversationId, c.id)));
+  if (!m) throw notFound("message_not_found", "Message not found.");
+  if (m.senderId === userId) return { consumed: false };
+  if (!m.viewOnce || !m.attachment) return { consumed: false };
+  await db().update(schema.messages).set({ attachment: null, viewOnce: false }).where(eq(schema.messages.id, messageId));
+  return { consumed: true };
 }
 
 export async function listMessages(userId: string, convId: string, after?: Date) {
@@ -121,6 +145,8 @@ export async function listMessages(userId: string, convId: string, after?: Date)
   }
   const other = c.ownerId === userId ? c.callerId : c.ownerId;
   const [o] = await db().select({ handle: schema.users.handle }).from(schema.users).where(eq(schema.users.id, other));
+  const { reactionsFor } = await import("./reactions");
+  const reactionMap = rows.length ? await reactionsFor(userId, "message", rows.map((m) => m.id)) : new Map();
   const { callEventsFor } = await import("./calls");
   return {
     calls: await callEventsFor(c),
@@ -129,6 +155,8 @@ export async function listMessages(userId: string, convId: string, after?: Date)
     messages: rows.map((m) => ({
       id: m.id, mine: m.senderId === userId, at: m.createdAt, expiresAt: m.expiresAt, read: !!m.readAt,
       text: aesGcmDecrypt(key, m.ciphertext, Buffer.from(`msg:${m.id}`)).toString("utf8"),
+      attachment: m.attachment, attachmentKind: m.attachmentKind, viewOnce: m.viewOnce,
+      reactions: reactionMap.get(m.id) ?? [],
     })),
   };
 }
@@ -196,18 +224,21 @@ export async function unreadTotal(userId: string): Promise<number> {
  */
 export async function callOptionFor(userId: string, convId: string) {
   const c = await participantConv(userId, convId);
-  if (c.callerId !== userId || !c.tokenId) return { canStart: false as const, reason: c.callerId === userId ? "no_token" : "owner" };
+  if (!c.tokenId) return { canStart: false as const, reason: "no_token" };
   const [t] = await db().select().from(schema.tokens).where(eq(schema.tokens.id, c.tokenId));
   if (!t) return { canStart: false as const, reason: "no_token" };
-  const rows = await db().select().from(schema.decodeRequests)
-    .where(and(eq(schema.decodeRequests.tokenId, c.tokenId), eq(schema.decodeRequests.callerId, userId), gt(schema.decodeRequests.expiresAt, new Date())))
-    .orderBy(desc(schema.decodeRequests.createdAt)).limit(5);
-  const { viewOf } = await import("./gate");
-  for (const r of rows) {
-    const usable = t.status === "active" || (t.status === "consumed" && r.outcomeCounted);
-    const v = viewOf(r, t.label, !t.numberId);
-    if (usable && v.status === "ok" && v.step === "choose" && v.options.includes("app_call"))
-      return { canStart: true as const, requestId: r.id, appCall: true };
+  // The caller may still use a live gate request; otherwise either side can call from an established chat.
+  if (c.callerId === userId) {
+    const rows = await db().select().from(schema.decodeRequests)
+      .where(and(eq(schema.decodeRequests.tokenId, c.tokenId), eq(schema.decodeRequests.callerId, userId), gt(schema.decodeRequests.expiresAt, new Date())))
+      .orderBy(desc(schema.decodeRequests.createdAt)).limit(5);
+    const { viewOf } = await import("./gate");
+    for (const r of rows) {
+      const usable = t.status === "active" || (t.status === "consumed" && r.outcomeCounted);
+      const v = viewOf(r, t.label, !t.numberId);
+      if (usable && v.status === "ok" && v.step === "choose" && v.options.includes("app_call"))
+        return { canStart: true as const, requestId: r.id, appCall: true };
+    }
   }
-  return { canStart: false as const, reason: "pass_gate_again" };
+  return { canStart: true as const, chatCall: true };
 }

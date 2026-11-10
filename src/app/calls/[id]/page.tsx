@@ -3,6 +3,7 @@ import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { CallEngine, type EngineState } from "@/components/calls/engine";
+import { MicMeter, ConnQuality } from "@/components/calls/AudioQuality";
 
 const engines = new Map<string, { engine: CallEngine; answered: boolean; leave?: ReturnType<typeof setTimeout> }>();
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -20,6 +21,8 @@ export default function CallPage({ params }: { params: Promise<{ id: string }> }
   const { id } = use(params);
   const [s, setS] = useState<EngineState>({ phase: "loading", call: null, error: "", muted: false, connectedAt: null });
   const [now, setNow] = useState(Date.now());
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [pc, setPc] = useState<RTCPeerConnection | null>(null);
   const engine = useRef<CallEngine | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
 
@@ -52,7 +55,7 @@ export default function CallPage({ params }: { params: Promise<{ id: string }> }
   // The caller is asked for the microphone while it rings, so the call can start the moment it's answered.
   const role = s.call?.role;
   useEffect(() => { if (role === "caller") void engine.current?.prepareMic(); }, [role]);
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
+  useEffect(() => { const t = setInterval(() => { setNow(Date.now()); setStream(engine.current?.localStream ?? null); setPc(engine.current?.peerConnection ?? null); }, 500); return () => clearInterval(t); }, []);
 
   const c = s.call;
   const ringLeft = c ? Math.max(0, Math.ceil((new Date(c.ringEndsAt).getTime() - now) / 1000)) : 0;
@@ -76,6 +79,8 @@ export default function CallPage({ params }: { params: Promise<{ id: string }> }
         <div style={{ fontSize: "1.5rem", fontWeight: 800, margin: "6px 0 2px" }}>{c ? `@${c.with}` : "…"}</div>
         <div data-testid="call-status">{status}</div>
         <div className="timer" role="timer">{s.phase === "connected" || s.phase === "reconnecting" ? fmt(talking) : s.phase === "ringing" ? `0:${String(ringLeft).padStart(2, "0")}` : c?.durationSec ? fmt(c.durationSec) : "—"}</div>
+        {stream && (s.phase === "ringing" || s.phase === "connecting" || s.phase === "connected") && <MicMeter stream={stream} />}
+        {(s.phase === "connected" || s.phase === "reconnecting") && <ConnQuality pc={pc} />}
 
         {s.error && <div className="alert err" role="alert" style={{ textAlign: "left" }}>{s.error}</div>}
 

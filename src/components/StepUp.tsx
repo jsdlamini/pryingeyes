@@ -8,6 +8,10 @@ export const useStepUp = () => useContext(Ctx);
 
 /** "Confirm it's you" dialog, used automatically when the server asks for a fresh second factor. */
 export function StepUpProvider({ children }: { children: React.ReactNode }) {
+  // Passkey support is decided after mount: knowing it during the first render would
+  // make the server HTML differ from the client tree and force a full re-hydration.
+  const [canPasskey, setCanPasskey] = useState(false);
+  useEffect(() => { setCanPasskey(passkeysSupported()); }, []);
   const ref = useRef<HTMLDialogElement>(null);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
   const [code, setCode] = useState("");
@@ -37,7 +41,7 @@ export function StepUpProvider({ children }: { children: React.ReactNode }) {
         <h2 id="stepup-title">Confirm it's you</h2>
         <p className="muted small">This action needs a fresh check of your second factor.</p>
         {err && <div className="alert err" role="alert">{err}</div>}
-        {passkeysSupported() && <button className="btn block" onClick={withPasskey} disabled={busy}>Use my passkey</button>}
+        {canPasskey && <button className="btn block" onClick={withPasskey} disabled={busy}>Use my passkey</button>}
         <form onSubmit={withCode} style={{ marginTop: 12 }}>
           <label htmlFor="stepup-code">Or enter the 6-digit code from your authenticator app</label>
           <input id="stepup-code" type="text" inputMode="numeric" autoComplete="one-time-code" className="otp" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />

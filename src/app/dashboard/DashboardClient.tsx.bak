@@ -7,16 +7,22 @@ import { Status, Tier } from "@/components/Tier";
 import { TokenShare } from "@/components/TokenShare";
 import { Icon } from "@/components/Icon";
 
-type Tok = { id: string; label: string; class: string; tier: number; status: string; displayPrefix: string; expiresAt: string | null; uses: number; decodeBudget: number | null; rotationDue: boolean; appOnly: boolean; number: { hint: string; label: string } | null };
+type Tok = { id: string; label: string; class: string; tier: number; status: string; displayPrefix: string; linkCode: string | null; shortCode: string | null; link: string | null; short: string | null; expiresAt: string | null; uses: number; decodeBudget: number | null; rotationDue: boolean; appOnly: boolean; number: { hint: string; label: string } | null };
 type Summary = { stats: { activeTokens: number; contactsThisWeek: number; pendingApprovals: number; attemptsBlocked: number; numbers: number }; tokens: Tok[]; feed: FeedEntry[] };
 
 export function DashboardClient() {
   const [d, setD] = useState<Summary | null>(null);
   const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
   const [share, setShare] = useState<{ link: string; short: string; label: string } | null>(null);
+  const [copied, setCopied] = useState<string>("");
   const panicRef = useRef<HTMLDialogElement>(null);
-  const load = useCallback(() => api<Summary>("/api/dashboard").then(setD).catch((e) => setErr(errMsg(e))), []);
-  useEffect(() => { load(); const id = setInterval(load, 15000); return () => clearInterval(id); }, [load]);
+  const load = useCallback(() => { if (document.visibilityState !== "visible") return; return api<Summary>("/api/dashboard").then(setD).catch((e) => setErr(errMsg(e))); }, []);
+  useEffect(() => {
+    void load();
+    const id = setInterval(load, 15000);
+    document.addEventListener("visibilitychange", load);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", load); };
+  }, [load]);
 
   async function act(t: Tok, action: string, extra: Record<string, unknown> = {}) {
     setErr(""); setMsg("");
@@ -28,6 +34,10 @@ export function DashboardClient() {
       await load();
     } catch (x) { setErr(errMsg(x)); }
   }
+  async function copyCode(t: Tok) {
+    if (!t.link) return;
+    try { await navigator.clipboard.writeText(t.link); setCopied(t.id); setTimeout(() => setCopied(""), 1800); } catch { /* clipboard unavailable */ }
+  }
   async function panic() {
     try { const r = await api("/api/panic", { body: {} }); panicRef.current?.close(); setMsg(`Done. ${r.revoked} code(s) revoked — old links and codes no longer work.`); await load(); }
     catch (x) { setErr(errMsg(x)); panicRef.current?.close(); }
@@ -36,11 +46,15 @@ export function DashboardClient() {
   const s = d.stats;
   return (
     <div className="page">
-      <div className="spread" style={{ marginBottom: 14 }}>
-        <div><h1 style={{ marginBottom: 2 }}>My codes</h1><p className="muted small" style={{ margin: 0 }}>Share a code wherever you&apos;d have shared your number. People reach you in PryingEyes.</p></div>
+      <div className="page-head spread">
+        <div><p className="eyebrow"><Icon name="shield" size={12} /> Contact codes</p>
+          <h1 style={{ marginBottom: 2 }}>My codes</h1>
+          <p className="muted small" style={{ margin: 0 }}>Share a code wherever you&apos;d have shared your number. People reach you in PryingEyes.</p></div>
         <div className="row">
           <Link className="btn" href="/dashboard/tokens/new"><Icon name="plus" size={16} />New code</Link>
-          <button className="btn danger-ghost" onClick={() => panicRef.current?.showModal()} data-testid="panic"><Icon name="block" size={16} />Panic: revoke all</button>
+          <button className="btn danger-ghost" onClick={() => panicRef.current?.showModal()} disabled={s.activeTokens === 0}
+            title={s.activeTokens === 0 ? "You have no active codes to revoke" : "Revoke every code at once"} data-testid="panic">
+            <Icon name="block" size={16} />Panic: revoke all</button>
         </div>
       </div>
       {err && <div className="alert err" role="alert">{err}</div>}
@@ -69,18 +83,26 @@ export function DashboardClient() {
                   <tr key={t.id}>
                     <td><b>{t.label}</b><br /><span className="muted tiny">{t.class}{t.expiresAt ? ` · expires ${relTime(t.expiresAt)}` : ""}{t.number ? ` · phone ··${t.number.hint}` : ""}{t.rotationDue ? " · rotation due" : ""}</span></td>
                     <td><Tier n={t.tier} /></td>
-                    <td className="hide-sm mono small">{t.displayPrefix}-····</td>
+                    <td className="mono small">
+  {t.short ? (
+    <button type="button" className="codechip" onClick={() => copyCode(t)} title={t.link ?? "Copy link"} aria-label={`Copy code for ${t.label}`}>
+      <span>{t.short}</span>{copied === t.id ? <Icon name="check" size={13} /> : <Icon name="copy" size={13} />}
+    </button>
+  ) : (
+    <span className="muted">{t.displayPrefix}-···· <span className="tiny">· rotate to reveal</span></span>
+  )}
+</td>
                     <td>{t.uses}{t.decodeBudget ? `/${t.decodeBudget}` : ""}</td>
                     <td><Status s={t.status} /></td>
                     <td>
-                      <details>
-                        <summary className="iconbtn sm" aria-label={`Actions for ${t.label}`} title="Actions"><Icon name="more" size={18} /></summary>
-                        <div className="stack" style={{ position: "absolute", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 8, padding: 8, zIndex: 5, minWidth: 160 }}>
-                          {t.status === "active" && <button className="btn ghost sm" onClick={() => act(t, "pause")}><Icon name="pause" size={15} />Pause</button>}
-                          {(t.status === "paused" || t.status === "frozen") && <button className="btn ghost sm" onClick={() => act(t, "resume")}><Icon name="play" size={15} />Resume</button>}
-                          {["active", "paused", "frozen", "expired"].includes(t.status) && <button className="btn ghost sm" onClick={() => act(t, "rotate")}><Icon name="refresh" size={15} />Replace with a new code</button>}
-                          {t.expiresAt && ["active", "paused", "frozen", "expired"].includes(t.status) && <button className="btn ghost sm" onClick={() => act(t, "extend", { hours: 48 })}>Extend 48 h</button>}
-                          {["active", "paused", "frozen"].includes(t.status) && <button className="btn danger-ghost sm" onClick={() => act(t, "revoke")}><Icon name="trash" size={15} />Revoke</button>}
+                      <details className="menu">
+                        <summary className="iconbtn sm" aria-label={`Actions for ${t.label}`} title="Actions"><Icon name="more" size={17} /></summary>
+                        <div className="pop menu-list">
+                          {t.status === "active" && <button className="plain-item" onClick={() => act(t, "pause")}><Icon name="pause" size={15} />Pause</button>}
+                          {(t.status === "paused" || t.status === "frozen") && <button className="plain-item" onClick={() => act(t, "resume")}><Icon name="play" size={15} />Resume</button>}
+                          {["active", "paused", "frozen", "expired"].includes(t.status) && <button className="plain-item" onClick={() => act(t, "rotate")}><Icon name="refresh" size={15} />Replace with a new code</button>}
+                          {t.expiresAt && ["active", "paused", "frozen", "expired"].includes(t.status) && <button className="plain-item" onClick={() => act(t, "extend", { hours: 48 })}><Icon name="clock" size={15} />Extend 48 h</button>}
+                          {["active", "paused", "frozen"].includes(t.status) && <button className="plain-item danger" onClick={() => act(t, "revoke")}><Icon name="trash" size={15} />Revoke</button>}
                         </div>
                       </details>
                     </td>

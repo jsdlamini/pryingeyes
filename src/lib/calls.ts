@@ -21,6 +21,7 @@ import { env } from "./env";
 import { badRequest, conflict, notFound, tooMany } from "./errors";
 import { hit } from "./ratelimit";
 import { notify } from "./notify";
+import { maybeTriggerGrowthLoop } from "./growth";
 import { redis } from "./redis";
 import { log } from "./log";
 import type { Token } from "./tokens";
@@ -214,7 +215,7 @@ export async function actOnCall(userId: string, id: string, action: CallAction) 
     if (action === "accept") {
       if (role !== "owner") throw conflict("invalid_action", "Only the person being called can answer.");
       u = await set("ringing", { status: "accepted", answeredAt: new Date() });
-      if (u) await audit({ type: "call.answered", actorId: userId, ownerId: u.ownerId, subjectType: "call", subjectId: u.id });
+      if (u) { await audit({ type: "call.answered", actorId: userId, ownerId: u.ownerId, subjectType: "call", subjectId: u.id }); if (u.callerId) void maybeTriggerGrowthLoop(u.callerId); if (u.ownerId) void maybeTriggerGrowthLoop(u.ownerId); }
     } else if (role === "owner") {
       u = await set("ringing", { status: "declined", endedAt: new Date(), endedBy: "owner" });
       if (u) { await audit({ type: "call.declined", actorId: userId, ownerId: u.ownerId, subjectType: "call", subjectId: u.id }); await cleanupSignals(u); }

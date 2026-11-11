@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, errMsg } from "@/components/api";
+import { useSearchParams } from "next/navigation";
 import { Tier, TIER_LINES } from "@/components/Tier";
 import { TokenShare } from "@/components/TokenShare";
 
@@ -15,7 +16,9 @@ export default function NewCode() {
   const [ctx, setCtx] = useState<string>("marketplace");
   const [rec, setRec] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
-  const [label, setLabel] = useState(""); const [tier, setTier] = useState(2); const [dur, setDur] = useState(0);
+  const sp = useSearchParams();
+  const [quick, setQuick] = useState(sp.get("quick") === "1");
+  const [label, setLabel] = useState(sp.get("label") ?? ""); const [tier, setTier] = useState(2); const [dur, setDur] = useState(0);
   const [numbers, setNumbers] = useState<Num[]>([]); const [numberId, setNumberId] = useState("");
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   const [made, setMade] = useState<{ link: string; short: string; label: string } | null>(null);
@@ -32,7 +35,7 @@ export default function NewCode() {
     e.preventDefault(); setBusy(true); setErr("");
     const [cls, hours] = DURATIONS[dur];
     try {
-      const r = await api("/api/tokens", { body: { label, tier, class: cls, ttlHours: hours, context: ctx, numberId: numberId || null } });
+      const r = await api("/api/tokens", { body: { label, tier, class: cls, ttlHours: hours, context: ctx, numberId: numberId || null, fromLoop: quick } });
       setMade({ link: r.link, short: r.short, label });
     } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
   }
@@ -49,8 +52,18 @@ export default function NewCode() {
   );
   return (
     <div className="page" style={{ maxWidth: 760 }}>
-      <h1>New code</h1>
+      <h1>{quick ? "Make your code" : "New code"}</h1>
       {err && <div className="alert err" role="alert">{err}</div>}
+      {quick ? (
+      <form onSubmit={create} className="card stack">
+        <p style={{ margin: 0 }}><b>Your code is almost ready.</b> People reach you without ever seeing your number.</p>
+        <div className="field" style={{ marginBottom: 0 }}><label htmlFor="label">Name</label>
+          <input id="label" type="text" maxLength={40} required value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Contact me" /></div>
+        <p className="muted tiny">{TIER_LINES[tier]}</p>
+        <button className="btn accent" disabled={busy || !label.trim()} style={{ alignSelf: "flex-start" }}>Create my code</button>
+        <button type="button" className="linkbtn small" onClick={() => setQuick(false)}>More options</button>
+      </form>
+      ) : (
       <form onSubmit={create} className="card stack">
         <div className="field" style={{ marginBottom: 0 }}><label htmlFor="label">Name</label>
           <input id="label" type="text" maxLength={40} required value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Car for sale" />
@@ -86,6 +99,7 @@ export default function NewCode() {
         ) : null}
         <button className="btn accent" disabled={busy || !label.trim()} style={{ alignSelf: "flex-start" }}>Create code</button>
       </form>
+      )}
     </div>
   );
 }

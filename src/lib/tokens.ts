@@ -167,6 +167,15 @@ export async function setTokenState(ownerId: string, tokenId: string, action: ke
   });
 }
 
+/** Permanently delete a code so it is removed from the list and can never be used again. */
+export async function deleteToken(ownerId: string, tokenId: string) {
+  const t = await ownedToken(ownerId, tokenId);
+  await db().transaction(async (tx) => {
+    await tx.delete(schema.tokens).where(eq(schema.tokens.id, tokenId));
+    await audit({ type: "token.deleted", actorId: ownerId, ownerId, subjectType: "token", subjectId: tokenId, payload: { label: t.label } }, tx);
+  });
+}
+
 /** Atomically issues new codes with the same settings and revokes the old token. */
 export async function rotateToken(ownerId: string, tokenId: string) {
   return db().transaction(async (tx) => {

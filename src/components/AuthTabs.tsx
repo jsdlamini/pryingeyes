@@ -8,7 +8,7 @@ import { CodeEntry } from "@/components/CodeEntry";
 
 const nextUrl = () => {
   const n = new URLSearchParams(window.location.search).get("next");
-  return n?.startsWith("/") && !n.startsWith("//") ? n : "/dashboard";
+  return n?.startsWith("/") && !n.startsWith("//") ? n : "/groups";
 };
 function after(status: string) {
   window.location.href = status === "mfa_required" ? `/login/mfa?next=${encodeURIComponent(nextUrl())}` : nextUrl();

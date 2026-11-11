@@ -4,6 +4,7 @@ import "@fontsource-variable/space-grotesk";
 import "./globals.css";
 import { Shell } from "@/components/Shell";
 import { StepUpProvider } from "@/components/StepUp";
+import { ConfirmProvider } from "@/components/Confirm";
 import { THEME_SCRIPT } from "@/lib/theme-script";
 
 export const metadata: Metadata = {
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <a className="skip" href="#main">Skip to content</a>
+        <ConfirmProvider>
         <StepUpProvider>
           <Shell />
           <main id="main">{children}</main>
@@ -33,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span>PryingEyes is not an emergency service. In an emergency, call 999 in Eswatini or your local emergency number.</span>
           </footer>
         </StepUpProvider>
+        </ConfirmProvider>
       </body>
     </html>
   );

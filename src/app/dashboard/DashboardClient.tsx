@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, errMsg, relTime } from "@/components/api";
+import { useConfirm } from "@/components/Confirm";
 import { Feed, type FeedEntry } from "@/components/Feed";
 import { Tier, TIER_LINES } from "@/components/Tier";
 import { TokenShare } from "@/components/TokenShare";
@@ -16,6 +17,7 @@ const people = (n: number) => `${n} ${n === 1 ? "person" : "people"}`;
 
 /** Home: what needs you first, then each live code as a "pass", then one clear action. */
 export function DashboardClient() {
+  const confirm = useConfirm();
   const [d, setD] = useState<Summary | null>(null);
   const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
   const [share, setShare] = useState<{ link: string; short: string; label: string } | null>(null);
@@ -31,8 +33,9 @@ export function DashboardClient() {
 
   async function act(t: Tok, action: string, extra: Record<string, unknown> = {}) {
     setErr(""); setMsg("");
-    if (action === "revoke" && !confirm(`Revoke "${t.label}"? Anyone holding this code will no longer be able to reach you.`)) return;
-    if (action === "rotate" && !confirm(`Replace "${t.label}" with a new code? The old code stops working; the new one keeps the same name and settings.`)) return;
+    if (action === "revoke" && !(await confirm(`Revoke "${t.label}"? Anyone holding this code will no longer be able to reach you.`, { danger: true, confirmLabel: "Revoke" }))) return;
+    if (action === "rotate" && !(await confirm(`Replace "${t.label}" with a new code? The old code stops working; the new one keeps the same name and settings.`, { confirmLabel: "Replace" }))) return;
+    if (action === "delete" && !(await confirm(`Delete "${t.label}" permanently? It will be removed and can never be used again.`, { danger: true, confirmLabel: "Delete" }))) return;
     try {
       const r = await api(`/api/tokens/${t.id}`, { body: { action, ...extra } });
       if (r.link) { setShare({ link: r.link, short: r.short, label: t.label }); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -53,6 +56,7 @@ export function DashboardClient() {
     <div className="page home">
       <p className="eyebrow"><Icon name="shield" size={12} /> Contact codes</p>
       <h1 className="home-title">Your codes</h1>
+      <p className="muted small" style={{ margin: "0 0 14px" }}>To call someone — or be called — share a code. It&apos;s how people reach you in PryingEyes, without ever seeing your number.</p>
       {err && <div className="alert err" role="alert">{err}</div>}
       {msg && <div className="alert ok" role="status">{msg}</div>}
 
@@ -68,7 +72,7 @@ export function DashboardClient() {
       {share && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="spread"><h2>New code for &ldquo;{share.label}&rdquo;</h2>
-            <button className="iconbtn sm" onClick={() => { if (shareSaved || confirm("You won't see this code again. Close without copying, sharing or saving it?")) setShare(null); }} aria-label="Close" title="Close"><Icon name="x" size={16} /></button></div>
+            <button className="iconbtn sm" onClick={async () => { if (shareSaved || await confirm("You won't see this code again. Close without copying, sharing or saving it?", { confirmLabel: "Close anyway" })) setShare(null); }} aria-label="Close" title="Close"><Icon name="x" size={16} /></button></div>
           <TokenShare {...share} onSavedChange={setShareSaved} />
         </div>
       )}
@@ -76,7 +80,7 @@ export function DashboardClient() {
       {live.length === 0 ? (
         <div className="card stack">
           <p style={{ margin: 0 }}><b>Create your first code.</b></p>
-          <p className="muted small" style={{ margin: 0 }}>Give it a name, like &ldquo;Car for sale&rdquo;, and choose who can reach you. Post the code where you&apos;d have put your number.</p>
+          <p className="muted small" style={{ margin: 0 }}>Give it a name and choose who can reach you — then share it so people can message or call you. Post the code where you&apos;d have put your number.</p>
         </div>
       ) : (
         <div className="pass-grid">
@@ -107,6 +111,7 @@ export function DashboardClient() {
                 <div className="pop menu-list">
                   {t.expiresAt && <button className="plain-item" onClick={() => act(t, "extend", { hours: 48 })}><Icon name="clock" size={15} />Extend 48 h</button>}
                   <button className="plain-item danger" onClick={() => act(t, "revoke")}><Icon name="trash" size={15} />Revoke</button>
+                  <button className="plain-item danger" onClick={() => act(t, "delete")}><Icon name="trash" size={15} />Delete permanently</button>
                 </div>
               </details>
             </section>

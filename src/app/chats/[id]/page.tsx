@@ -5,6 +5,8 @@ import { api, errMsg, clock } from "@/components/api";
 import { KindPicker, MessageText, type CodeKind } from "@/components/Social";
 import { uploadAudio, uploadImage } from "@/components/upload";
 import { ReactionBar } from "@/components/ReactionBar";
+import { useConfirm } from "@/components/Confirm";
+import { GrowthLoopPrompt } from "@/components/GrowthLoopPrompt";
 import { Icon } from "@/components/Icon";
 import { TIER_NAMES } from "@/components/Tier";
 
@@ -43,6 +45,7 @@ function Media({ m, light, onConsume }: { m: Msg; light: boolean; onConsume: () 
 
 export default function Conversation({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const confirm = useConfirm();
   const [conv, setConv] = useState<any>(null);
   const [callOpt, setCallOpt] = useState<{ canStart: boolean; requestId?: string; reason?: string; appCall?: boolean; chatCall?: boolean } | null>(null);
   const [calls, setCalls] = useState<{ id: string; at: string; status: string; durationSec: number }[]>([]);
@@ -52,7 +55,7 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
   // Share a contact code in this chat (for example for someone else to use). Opens the owner's gate when tapped.
   const [sharing, setSharing] = useState(false); const [kind, setKind] = useState<CodeKind>("one"); const [tier, setTier] = useState(1);
   const [reporting, setReporting] = useState(false);
-  const [safety, setSafety] = useState(""); const [safetyOpen, setSafetyOpen] = useState(false);
+  const [safety, setSafety] = useState(""); const [safetyOpen, setSafetyOpen] = useState(false); const [msg, setMsg] = useState("");
   const [picked, setPicked] = useState<string[]>([]); const [reason, setReason] = useState("harassment"); const [details, setDetails] = useState("");
   const box = useRef<HTMLDivElement>(null);
   // Data-light: photos, voice notes and videos from the other person load only when tapped.
@@ -138,7 +141,7 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
     } catch (x) { setErr(errMsg(x)); } finally { setCalling(false); }
   }
   async function block() {
-    if (!confirm("Block this person? Neither of you will be able to send messages here, and they can't reach your codes.")) return;
+    if (!(await confirm("Block this person? Neither of you will be able to send messages here, and they can't reach your codes.", { danger: true, confirmLabel: "Block" }))) return;
     try { await api(`/api/chats/${id}/block`, { body: {} }); await load(); } catch (x) { setErr(errMsg(x)); }
   }
   async function verify() {
@@ -150,11 +153,12 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
   }
   async function report(e: React.FormEvent) {
     e.preventDefault();
-    try { await api("/api/reports", { body: { conversationId: id, reason, details, messageIds: picked, block: true } }); setReporting(false); setPicked([]); setErr(""); alert("Thanks. A moderator will review this, and the person is blocked."); await load(); }
+    try { await api("/api/reports", { body: { conversationId: id, reason, details, messageIds: picked, block: true } }); setReporting(false); setPicked([]); setErr(""); setMsg("Thanks. A moderator will review this, and the person is blocked."); await load(); }
     catch (x) { setErr(errMsg(x)); }
   }
   return (
     <div className="page" style={{ maxWidth: 760 }}>
+      <GrowthLoopPrompt />
       {conv && (
         <header className="chat-head">
           <Link href="/chats" className="iconbtn plain" aria-label="Back to chats"><Icon name="arrow" size={20} className="icon flip" /></Link>
@@ -181,6 +185,7 @@ export default function Conversation({ params }: { params: Promise<{ id: string 
       {conv && !callOpt?.canStart && callOpt?.reason === "pass_gate_again" && <p className="small muted" style={{ margin: "8px 2px 0" }}>To call, open the owner&apos;s link again — calls need a fresh check.</p>}
       {safetyOpen && <div className="card" style={{ marginTop: 10 }}><p className="muted small" style={{ margin: "0 0 6px" }}>Compare this safety number with @{conv.with} to confirm no one is in the middle.</p><div className="safety-num">{safety || "Loading…"}</div></div>}
       {err && <div className="alert err" role="alert">{err}</div>}
+      {msg && <div className="alert ok" role="status">{msg}</div>}
       {reporting && <form className="card stack" onSubmit={report}>
         <b>Report this conversation</b>
         <p className="small muted">Tick the messages to include. Only the messages you choose are sent to moderators.</p>

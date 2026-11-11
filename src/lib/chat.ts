@@ -14,6 +14,7 @@ import { badRequest, forbidden, notFound, tooMany } from "./errors";
 import { hit } from "./ratelimit";
 import type { Token } from "./tokens";
 import { notify } from "./notify";
+import { maybeTriggerGrowthLoop } from "./growth";
 import { redis } from "./redis";
 import { log } from "./log";
 import { deleteUpload, ownUpload } from "./uploads";
@@ -118,6 +119,7 @@ export async function sendMessage(userId: string, convId: string, text: string, 
   });
   await db().update(schema.conversations).set({ lastMessageAt: now }).where(eq(schema.conversations.id, c.id));
   await notifyChat(c, userId, "chat_message");
+  void maybeTriggerGrowthLoop(userId);
   return { id, createdAt: now };
 }
 

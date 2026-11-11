@@ -5,7 +5,7 @@ import { LandingPhrases } from "@/components/LandingPhrases";
 
 export default async function Home({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const a = await currentAuth();
-  if (a && !a.session.mfaPending) redirect("/dashboard");
+  if (a && !a.session.mfaPending) redirect("/groups");
   const { tab } = await searchParams;
   const initialTab: "signin" | "signup" | "reach" = tab === "signup" || tab === "reach" ? tab : "signin";
   return (

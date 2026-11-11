@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errMsg, relTime } from "@/components/api";
+import { useConfirm } from "@/components/Confirm";
 import { Icon } from "@/components/Icon";
 
 type R = { id: string; appOnly?: boolean; stage: string; label: string; createdAt: string; consentExpiresAt: string | null; note: string | null;
@@ -18,6 +19,7 @@ const UNDO_SECONDS = 5;
 export default function Requests() {
   const [rs, setRs] = useState<R[] | null>(null);
   const [err, setErr] = useState("");
+  const confirm = useConfirm();
   const [tab, setTab] = useState<"waiting" | "decided">("waiting");
   const [open, setOpen] = useState<string | null>(null);          // which card shows its extra options
   const [pending, setPending] = useState<Pending | null>(null);   // decision waiting out its undo window
@@ -40,8 +42,8 @@ export default function Requests() {
   }, [pending, send]);
   useEffect(() => () => { const p = pendingRef.current; if (p) void api(`/api/requests/${p.id}/decision`, { body: { decision: p.decision } }).catch(() => undefined); }, []);
 
-  function decide(r: R, decision: Decision) {
-    if (decision === "decline_block" && !confirm(`Decline and block @${r.caller.handle} from all your codes?`)) return;
+  async function decide(r: R, decision: Decision) {
+    if (decision === "decline_block" && !(await confirm(`Decline and block @${r.caller.handle} from all your codes?`, { danger: true, confirmLabel: "Decline & block" }))) return;
     if (pendingRef.current) void send(pendingRef.current);    // a second decision sends the first now
     const p = { id: r.id, handle: r.caller.handle, decision, left: UNDO_SECONDS };
     pendingRef.current = p; setPending(p); setOpen(null);

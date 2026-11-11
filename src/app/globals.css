@@ -845,3 +845,13 @@ video.post-attach.video, video.comment-attach.video, video.msg-attach.video { ma
 .leave-note { display: flex; gap: 10px; align-items: flex-start; margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: var(--violet-bg); color: var(--violet-ink); font-size: .87rem; }
 .leave-note b { color: var(--ink); }
 .icon.flip { transform: scaleX(-1); }
+
+/* Custom confirmation dialog */
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(5, 15, 30, .55); backdrop-filter: blur(2px); display: grid; place-items: center; padding: 16px; }
+.modal-backdrop .modal { max-width: 400px; width: 100%; }
+
+/* Compact attach-code line */
+.attach-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--accent-bg); }
+
+/* Growth loop prompt */
+.loop-prompt { border-color: var(--accent-2); }

@@ -50,7 +50,7 @@ export default function Admin() {
           <button className="btn sm">Apply</button>
         </form>
         {!users ? <p>Loading…</p> : users.length === 0 ? <p className="muted small">No users.</p> : (
-          <table className="tbl"><thead><tr><th>Handle</th><th>Email</th><th>Status</th><th>Roles</th><th className="hide-sm">Verified</th><th>Codes</th><th>Actions</th></tr></thead>
+          <div className="tablewrap"><table className="tbl"><thead><tr><th>Handle</th><th>Email</th><th>Status</th><th>Roles</th><th className="hide-sm">Verified</th><th>Codes</th><th>Actions</th></tr></thead>
           <tbody>{users.map((u) => (
             <tr key={u.id}>
               <td><b>@{u.handle}</b></td>
@@ -60,11 +60,13 @@ export default function Admin() {
               <td className="hide-sm small">{u.emailVerified ? "yes" : "no"}</td>
               <td>{u.codeCount}</td>
               <td>
-                <button className="btn ghost sm" onClick={() => setLh(u.handle)}>Codes</button>
-                <button className="btn ghost sm" onClick={() => setUa({ handle: u.handle, action: u.status === "suspended" ? "unsuspend_user" : "suspend_user", role: "moderator", reason: "" })}>{u.status === "suspended" ? "Unsuspend" : "Suspend"}</button>
+                <div className="stack" style={{ gap: 4 }}>
+                  <button className="btn ghost sm" onClick={() => setLh(u.handle)}>Codes</button>
+                  <button className="btn ghost sm" onClick={() => setUa({ handle: u.handle, action: u.status === "suspended" ? "unsuspend_user" : "suspend_user", role: "moderator", reason: "" })}>{u.status === "suspended" ? "Unsuspend" : "Suspend"}</button>
+                </div>
               </td>
             </tr>
-          ))}</tbody></table>
+          ))}</tbody></table></div>
         )}
       </div>
       <div className="card">

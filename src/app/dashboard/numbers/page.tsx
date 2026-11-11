@@ -1,11 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api, ApiError, errMsg } from "@/components/api";
+import { useConfirm } from "@/components/Confirm";
 import { PhoneInput, initialPhone, phoneBody, phoneValid, type PhoneValue } from "@/components/PhoneInput";
 
 export default function Numbers() {
   const [ns, setNs] = useState<any[] | null>(null);
   const [phone, setPhone] = useState<PhoneValue>({ country: "SZ", number: "" }); const [label, setLabel] = useState("");
+  const confirm = useConfirm();
   const [err, setErr] = useState(""); const [busy, setBusy] = useState(false);
   // Numbers need two-step sign-in first; the set-up page walks through it.
   const load = useCallback(() => api("/api/numbers").then((r) => setNs(r.numbers))
@@ -16,7 +18,7 @@ export default function Numbers() {
     try { await api("/api/numbers", { body: { ...phoneBody(phone), label } }); setPhone({ ...phone, number: "" }); setLabel(""); await load(); } catch (x) { setErr(errMsg(x)); } finally { setBusy(false); }
   }
   async function remove(id: string) {
-    if (!confirm("Remove this number? Codes that use it stop working.")) return;
+    if (!(await confirm("Remove this number? Codes that use it stop working.", { danger: true, confirmLabel: "Remove" }))) return;
     try { await api(`/api/numbers/${id}`, { method: "DELETE" }); await load(); } catch (x) { setErr(errMsg(x)); }
   }
   return (

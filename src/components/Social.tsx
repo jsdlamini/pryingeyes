@@ -197,7 +197,8 @@ const TIER_HELP = TIER_LINES;
 
 /** Post box with "Attach my contact code". Phone numbers in the text are refused with an explanation. */
 export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeholder: string; onPost: (b: { text: string; attach: { tier: number; kind: CodeKind } | null; attachment: string | null }) => Promise<unknown>; buttonLabel?: string }) {
-  const [text, setText] = useState(""); const [attach, setAttach] = useState(true); const [tier, setTier] = useState(2); const [kind, setKind] = useState<CodeKind>("standard");
+  const [text, setText] = useState(""); const [attach, setAttach] = useState(true); const [tier, setTier] = useState(1); const [kind, setKind] = useState<CodeKind>("standard");
+  const [showOpts, setShowOpts] = useState(false);
   const [codeWarned, setCodeWarned] = useState(() => { try { return localStorage.getItem("pe-code-warned") === "1"; } catch { return false; } });
   const [warnShow, setWarnShow] = useState(false);
   useEffect(() => {
@@ -246,15 +247,22 @@ export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeh
       {img ? <div className="attach-preview">{/\.(mp4|mov|m4v)$/.test(img) ? <video src={img} controls className="composer-media" /> : <img src={img} alt="Attachment" />}<button type="button" className="iconbtn sm" onClick={() => setImg(null)} aria-label="Remove media"><Icon name="x" size={14} /></button></div> : null}
       {voice ? <div className="attach-preview"><audio controls src={voice} className="composer-voice" /><button type="button" className="iconbtn sm" onClick={() => { setVoice(null); vr.reset(); }} aria-label="Remove voice note"><Icon name="x" size={14} /></button></div> : null}
       {err ? <div className={`alert ${blocked ? "warn" : "err"}`}>{err}</div> : null}
-      {attach ? (
+      {attach && !showOpts && (
+        <div className="attach-line">
+          <span className="muted tiny">Sharing your contact code in <b>{TIER_NAMES[tier]}</b> mode — people can message or call you.</span>
+          <button type="button" className="linkbtn tiny" onClick={() => setShowOpts(true)}>Change</button>
+        </div>
+      )}
+      {showOpts && (
         <div className="stack small">
           {warnShow && <div className="alert warn" style={{ margin: 0 }}>Your contact code is attached by default — people you share with can message or call you. Turn it off any time with the button below.</div>}
           <p className="muted">People open your code to message or call you in PryingEyes. No phone number is involved. Each group gets its own code, which you can switch off on <a href="/dashboard">My codes</a>.</p>
           <div className="chips">{[1, 2, 3].map((n) => <button type="button" key={n} className="chip" aria-pressed={tier === n} onClick={() => setTier(n)}>{TIER_NAMES[n]}</button>)}</div>
           <p className="muted tiny">{TIER_HELP[tier]}</p>
           <KindPicker kind={kind} setKind={setKind} />
+          <button type="button" className="linkbtn tiny" onClick={() => setShowOpts(false)}>Done</button>
         </div>
-      ) : null}
+      )}
       <div className="bar">
         <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={pickImage} />
         <button type="button" className={`attach${vr.recording ? " recording" : voice ? " on" : ""}`} aria-pressed={vr.recording || !!voice} onClick={vr.recording ? vr.stop : startVoice} data-testid="attach-voice">
@@ -263,8 +271,8 @@ export function Composer({ placeholder, onPost, buttonLabel = "Post" }: { placeh
         <button type="button" className={`attach ${img ? "on" : ""}`} aria-pressed={!!img} onClick={() => fileRef.current?.click()} disabled={imgBusy} data-testid="attach-image">
           <Icon name="image" size={16} /> {imgBusy ? "Uploading…" : img ? "Media attached" : "Add photo/video"}
         </button>
-        <button type="button" className={`attach ${attach ? "on" : ""}`} aria-pressed={attach} onClick={() => setAttach(!attach)} data-testid="attach-code">
-          <Icon name="mark" size={16} /> {attach ? "Contact code attached" : "Attach my contact code"}
+        <button type="button" className={`attach ${attach ? "on" : ""}`} aria-pressed={attach} onClick={() => { setAttach(!attach); if (attach) setShowOpts(false); }} data-testid="attach-code">
+          <Icon name="mark" size={16} /> {attach ? `Contact code · ${TIER_NAMES[tier]}` : "Attach contact code"}
         </button>
         <button className="sendbtn" disabled={busy || (!text.trim() && !attach && !img && !voice)} data-testid="composer-send" aria-label={buttonLabel} title={buttonLabel}><Icon name="send" size={22} /></button>
       </div>

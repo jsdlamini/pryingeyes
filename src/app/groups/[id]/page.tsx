@@ -2,6 +2,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, errMsg } from "@/components/api";
+import { useConfirm } from "@/components/Confirm";
 import { Icon } from "@/components/Icon";
 import { Composer, PostCard, type PostView } from "@/components/Social";
 
@@ -14,6 +15,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const router = useRouter();
   const created = useSearchParams().get("created");
   const [g, setG] = useState<Detail | null>(null);
+  const confirm = useConfirm();
   const [posts, setPosts] = useState<PostView[] | null>(null);
   const [err, setErr] = useState(""); const [copied, setCopied] = useState(false);
   const load = useCallback(() => Promise.all([api(`/api/groups/${id}`), api(`/api/groups/${id}/posts`)])
@@ -60,7 +62,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <code className="invite" data-testid="invite-link">{g.invite}</code>
             <div className="row" style={{ marginTop: 8 }}>
               <button className="btn sm" onClick={async () => { await navigator.clipboard?.writeText(g.invite!); setCopied(true); setTimeout(() => setCopied(false), 1500); }}><Icon name={copied ? "check" : "copy"} size={16} />{copied ? "Copied" : "Copy link"}</button>
-              <button className="btn ghost sm" onClick={() => { if (confirm("Make a new link? The old one stops working.")) act(() => api(`/api/groups/${id}/invite`, { body: {} })); }}><Icon name="refresh" size={16} />New link</button>
+              <button className="btn ghost sm" onClick={async () => { if (await confirm("Make a new link? The old one stops working.", { confirmLabel: "Make new link" })) act(() => api(`/api/groups/${id}/invite`, { body: {} })); }}><Icon name="refresh" size={16} />New link</button>
             </div>
           </div>
         ) : null}
@@ -71,10 +73,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               <li key={m.id}><span>@{m.handle}{m.you ? " (you)" : ""}{m.role === "admin" ? <span className="muted tiny"> · admin</span> : null}</span>
                 {g.role === "admin" && !m.you ? <span className="row">
                   {m.role !== "admin" ? <button className="iconbtn sm plain" onClick={() => act(() => api(`/api/groups/${id}/members`, { body: { userId: m.id, action: "make_admin" } }))} aria-label={`Make @${m.handle} an admin`} title="Make admin"><Icon name="shield" size={16} /></button> : null}
-                  <button className="iconbtn sm plain danger" onClick={() => { if (confirm(`Remove @${m.handle}?`)) act(() => api(`/api/groups/${id}/members`, { body: { userId: m.id, action: "remove" } })); }} aria-label={`Remove @${m.handle}`} title="Remove"><Icon name="trash" size={16} /></button>
+                  <button className="iconbtn sm plain danger" onClick={async () => { if (await confirm(`Remove @${m.handle}?`, { danger: true, confirmLabel: "Remove" })) act(() => api(`/api/groups/${id}/members`, { body: { userId: m.id, action: "remove" } })); }} aria-label={`Remove @${m.handle}`} title="Remove"><Icon name="trash" size={16} /></button>
                 </span> : null}
               </li>))}</ul>
-            <button className="btn danger-ghost sm" style={{ marginTop: 10 }} onClick={() => { if (confirm("Leave this group?")) api(`/api/groups/${id}/leave`, { body: {} }).then(() => router.push("/groups")).catch((e) => setErr(errMsg(e))); }}><Icon name="logout" size={16} />Leave group</button>
+            <button className="btn danger-ghost sm" style={{ marginTop: 10 }} onClick={async () => { if (await confirm("Leave this group?", { danger: true, confirmLabel: "Leave group" })) api(`/api/groups/${id}/leave`, { body: {} }).then(() => router.push("/groups")).catch((e) => setErr(errMsg(e))); }}><Icon name="logout" size={16} />Leave group</button>
           </div>
         ) : null}
       </aside>

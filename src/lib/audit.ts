@@ -24,7 +24,7 @@ export type AuditType =
   | "account.recovery_completed" | "account.recovery_cancelled" | "account.password_changed"
   | "account.session_revoked" | "account.exported" | "account.erased" | "account.suspended" | "account.unsuspended"
   | "number.added" | "number.removed"
-  | "token.created" | "token.paused" | "token.resumed" | "token.rotated" | "token.revoked" | "token.frozen"
+  | "token.created" | "token.paused" | "token.resumed" | "token.rotated" | "token.revoked" | "token.frozen" | "token.deleted"
   | "token.unfrozen" | "token.extended" | "token.consumed" | "token.expired" | "panic.revoke_all"
   | "gate.attempt" | "gate.rejected" | "gate.passed" | "gate.otp_sent" | "gate.otp_failed" | "gate.otp_passed"
   | "consent.requested" | "consent.approved_relay" | "consent.approved_reveal" | "consent.declined"
@@ -36,7 +36,8 @@ export type AuditType =
   | "group.created" | "group.joined" | "group.join_requested" | "group.join_declined" | "group.left" | "group.member_removed" | "group.invite_reset"
   | "post.created" | "post.deleted" | "post.reported" | "post.rejected_contact" | "post.commented" | "post.edited"
   | "moderation.action" | "admin.requested" | "admin.approved" | "admin.rejected" | "admin.executed"
-  | "evidence.exported" | "retention.applied";
+  | "evidence.exported" | "retention.applied"
+  | "growth.loop_prompt_shown" | "growth.loop_code_created" | "growth.loop_dismissed";
 
 export interface AuditInput {
   type: AuditType;

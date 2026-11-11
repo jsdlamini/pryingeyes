@@ -258,11 +258,14 @@ export async function listTokens(ownerId: string) {
   const fids = rows.map((r) => r.t.id);
   const funnelMap = new Map<string, Record<string, number>>();
   if (fids.length) {
-    const fr = await db().execute(sql`SELECT code_id, counter, sum(count)::int AS total FROM funnel_daily WHERE code_id = ANY(${fids}::uuid[]) AND day > current_date - 7 * interval '1 day' GROUP BY code_id, counter`);
-    for (const r of fr.rows as { code_id: string; counter: string; total: number }[]) {
-      const m = funnelMap.get(r.code_id) ?? {};
+    const fr = await db().select({ codeId: schema.funnelDaily.codeId, counter: schema.funnelDaily.counter, total: sql<number>`sum(${schema.funnelDaily.count})::int` })
+      .from(schema.funnelDaily)
+      .where(and(inArray(schema.funnelDaily.codeId, fids), sql`${schema.funnelDaily.day} > current_date - 7 * interval '1 day'`))
+      .groupBy(schema.funnelDaily.codeId, schema.funnelDaily.counter);
+    for (const r of fr) {
+      const m = funnelMap.get(r.codeId) ?? {};
       m[r.counter] = r.total;
-      funnelMap.set(r.code_id, m);
+      funnelMap.set(r.codeId, m);
     }
   }
   return rows.map(({ t, hint, numberLabel }) => ({

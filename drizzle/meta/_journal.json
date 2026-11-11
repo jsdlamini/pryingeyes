@@ -141,6 +141,13 @@
       "when": 1794376761836,
       "tag": "0019_loop_prompt",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794393380698,
+      "tag": "0020_funnel_daily",
+      "breakpoints": true
     }
   ]
 }

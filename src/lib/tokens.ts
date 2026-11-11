@@ -255,6 +255,16 @@ export async function listTokens(ownerId: string) {
   const contactRows = tids.length ? await db().select({ tokenId: schema.conversations.tokenId, n: sql<number>`count(distinct ${schema.conversations.callerId})` })
     .from(schema.conversations).where(inArray(schema.conversations.tokenId, tids)).groupBy(schema.conversations.tokenId) : [];
   const contacts = new Map(contactRows.map((r) => [r.tokenId, Number(r.n)]));
+  const fids = rows.map((r) => r.t.id);
+  const funnelMap = new Map<string, Record<string, number>>();
+  if (fids.length) {
+    const fr = await db().execute(sql`SELECT code_id, counter, sum(count)::int AS total FROM funnel_daily WHERE code_id = ANY(${fids}::uuid[]) AND day > current_date - 7 * interval '1 day' GROUP BY code_id, counter`);
+    for (const r of fr.rows as { code_id: string; counter: string; total: number }[]) {
+      const m = funnelMap.get(r.code_id) ?? {};
+      m[r.counter] = r.total;
+      funnelMap.set(r.code_id, m);
+    }
+  }
   return rows.map(({ t, hint, numberLabel }) => ({
     id: t.id, label: t.label, class: t.class, tier: t.tier, context: t.context,
     status: t.expiresAt && t.expiresAt <= now && LIVE_STATUSES.includes(t.status as any) ? "expired" : t.status,
@@ -263,6 +273,7 @@ export async function listTokens(ownerId: string) {
     rotationDue: !!(t.rotationDueAt && t.rotationDueAt <= now), createdAt: t.createdAt,
     appOnly: !t.numberId,
     contacts: contacts.get(t.id) ?? 0,
+    funnel: funnelMap.get(t.id) ?? {},
     number: t.numberId ? { id: t.numberId, hint, label: numberLabel } : null,
   }));
 }

@@ -74,6 +74,7 @@ export async function signupEmail(input: { email: string; password: string; hand
   const u = await withHandle(input.handle, async (handle) =>
     (await db().insert(schema.users).values({ handle, email, passwordHash, ageConfirmedAt: new Date(), status: "pending" }).returning())[0]);
   await audit({ type: "account.created", actorId: u.id, ownerId: u.id, payload: { method: "email" } });
+  { const { bumpFromNext } = await import("./funnel"); void bumpFromNext(input.next, "signup_started"); }
   try {
     await sendVerificationEmail(u.id, email, input.next);
   } catch (err) {
@@ -92,7 +93,7 @@ export async function sendVerificationEmail(userId: string, email: string, next?
     text: `Confirm your email to finish creating your account:\n\n${env().APP_URL}/verify-email?token=${secret}${safeNext(next) ? `&next=${encodeURIComponent(safeNext(next)!)}` : ""}\n\nThis link expires in 24 hours.` });
 }
 
-export async function verifyEmailToken(secret: string) {
+export async function verifyEmailToken(secret: string, next?: string | null) {
   const [t] = await db().select().from(schema.verificationTokens).where(eq(schema.verificationTokens.hash, sha256Hex(secret ?? "")));
   if (!t || t.usedAt || t.expiresAt < new Date() || t.purpose !== "verify_email") throw badRequest("link_invalid", "This link has expired or was already used.");
   await db().transaction(async (tx) => {
@@ -102,6 +103,7 @@ export async function verifyEmailToken(secret: string) {
     await audit({ type: "account.verified", actorId: t.userId, ownerId: t.userId, payload: { channel: "email" } }, tx);
   });
   await grantConfiguredAdmins(t.userId);
+  if (next) { const { bumpFromNext } = await import("./funnel"); void bumpFromNext(next, "signup_completed"); }
   return t.userId;
 }
 

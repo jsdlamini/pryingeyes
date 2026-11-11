@@ -13,7 +13,7 @@ export default function VerifyEmail() {
     // Back to whatever they were opening when they signed up (a contact code or a group invite).
     const n = q.get("next");
     if (n && /^\/(?!\/)/.test(n)) setNext(n);
-    api("/api/auth/verify-email", { body: { token } }).then(() => setState("ok")).catch((e) => { setMsg(errMsg(e)); setState("err"); });
+    api("/api/auth/verify-email", { body: { token, next } }).then(() => setState("ok")).catch((e) => { setMsg(errMsg(e)); setState("err"); });
   }, []);
   return (
     <div className="narrow">

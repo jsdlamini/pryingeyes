@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { audit } from "./audit";
 
@@ -29,4 +29,11 @@ export async function dismissGrowthLoop(userId: string): Promise<void> {
 export async function recordLoopCodeCreated(userId: string): Promise<void> {
   await db().update(schema.users).set({ loopPrompt: null }).where(eq(schema.users.id, userId));
   await audit({ type: "growth.loop_code_created", actorId: userId, ownerId: userId });
+  // Attribute to the code that first brought them here (their earliest conversation as the caller).
+  try {
+    const [conv] = await db().select({ tokenId: schema.conversations.tokenId }).from(schema.conversations)
+      .where(and(eq(schema.conversations.callerId, userId), isNotNull(schema.conversations.tokenId)))
+      .orderBy(asc(schema.conversations.createdAt)).limit(1);
+    if (conv?.tokenId) { const { bumpFunnel } = await import("./funnel"); void bumpFunnel(conv.tokenId, "loop_code_created"); }
+  } catch { /* best-effort */ }
 }

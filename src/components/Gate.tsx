@@ -75,6 +75,8 @@ export function Gate(p: { code?: string; requestId?: string; signedIn: boolean; 
       <span className="muted small">{t("gate.reaching")} someone on PryingEyes</span>
       <h1>{t("gate.signin")}</h1>
       <p className="muted small">{t("gate.signin.why")}</p>
+      <p className="trust-line">So they know you&apos;re a real person. Neither of you sees the other&apos;s number.</p>
+      <details className="what-is"><summary>What is PryingEyes?</summary><p className="muted small">PryingEyes lets people share a code instead of a phone number. Whoever opens it can message or call them in the app, after passing a check. You never see their number, and they never see yours.</p></details>
       <Link className="btn block" href={`/signup?next=${encodeURIComponent(`/t/${p.code}`)}`} data-testid="gate-signup">Create an account</Link>
       <Link className="btn ghost block" href={`/login?next=${encodeURIComponent(`/t/${p.code}`)}`}>Sign in</Link>
       <p className="small muted">You&apos;ll come straight back to this code. They see your handle, never your email.</p>

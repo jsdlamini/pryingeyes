@@ -8,7 +8,7 @@ import { Tier, TIER_LINES } from "@/components/Tier";
 import { TokenShare } from "@/components/TokenShare";
 import { Icon } from "@/components/Icon";
 
-type Tok = { id: string; label: string; class: string; tier: number; status: string; displayPrefix: string; expiresAt: string | null; uses: number; decodeBudget: number | null; rotationDue: boolean; appOnly: boolean; contacts: number; number: { hint: string; label: string } | null };
+type Tok = { id: string; label: string; class: string; tier: number; status: string; displayPrefix: string; expiresAt: string | null; uses: number; decodeBudget: number | null; rotationDue: boolean; appOnly: boolean; contacts: number; funnel: Record<string, number>; number: { hint: string; label: string } | null };
 type Summary = { stats: { activeTokens: number; contactsThisWeek: number; pendingApprovals: number; attemptsBlocked: number; numbers: number }; tokens: Tok[]; feed: FeedEntry[] };
 
 const LIVE = ["active", "paused", "frozen"];
@@ -94,6 +94,7 @@ export function DashboardClient() {
               <div className="pass-code" aria-label={`Code starting ${t.displayPrefix}`}>{t.displayPrefix}<span className="hid">-•••••</span></div>
               <div className="pass-chips">
                 <span className="pass-chip">{t.contacts ? `${people(t.contacts)} reached you` : "No one yet"}</span>
+                {(t.funnel.opened || t.funnel.reached) ? <span className="pass-chip v">Opened {t.funnel.opened ?? 0} · Signed up {t.funnel.signup_completed ?? 0} · Reached {t.funnel.reached ?? 0}</span> : null}
                 <span className="pass-chip v">{t.number ? `Phone ··${t.number.hint} behind it` : "No number behind it"}</span>
                 {t.expiresAt && <span className="pass-chip w">Expires {relTime(t.expiresAt)}</span>}
                 {t.decodeBudget ? <span className="pass-chip w">{t.uses}/{t.decodeBudget} uses</span> : null}

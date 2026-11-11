@@ -251,6 +251,13 @@ export const conversations = pgTable("conversations", {
   index("conv_caller_idx").on(t.callerId),
 ]);
 
+export const funnelDaily = pgTable("funnel_daily", {
+  codeId: uuid("code_id").notNull().references(() => tokens.id, { onDelete: "cascade" }),
+  day: date("day").notNull(),
+  counter: text("counter").notNull(),
+  count: integer("count").notNull().default(1),
+}, (t) => [primaryKey({ columns: [t.codeId, t.day, t.counter] })]);
+
 export const reactions = pgTable("reactions", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

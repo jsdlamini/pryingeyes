@@ -855,3 +855,22 @@ video.post-attach.video, video.comment-attach.video, video.msg-attach.video { ma
 
 /* Growth loop prompt */
 .loop-prompt { border-color: var(--accent-2); }
+
+/* Gate trust line + What is PryingEyes */
+.trust-line { font-weight: 600; color: var(--ink); }
+.what-is { margin-top: 2px; }
+.what-is summary { cursor: pointer; font-weight: 600; color: var(--accent); font-size: .87rem; }
+.what-is p { margin: 6px 0 0; }
+
+/* Print card (A6 portrait, shown only when printing) */
+.print-card { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  .print-card, .print-card * { visibility: visible; }
+  .print-card { display: block; position: fixed; top: 0; left: 0; width: 105mm; height: 148mm; padding: 12mm; text-align: center; background: #fff; color: #0C1626; }
+  .print-card img { width: 70mm; height: 70mm; }
+  .print-card-head { font-size: 15pt; font-weight: 700; margin-bottom: 4mm; }
+  .print-card-code { font-size: 20pt; font-weight: 700; letter-spacing: .08em; margin: 5mm 0; }
+  .print-card-line { font-size: 11pt; color: #33506B; }
+}
+.share-texts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

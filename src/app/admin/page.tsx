@@ -6,7 +6,9 @@ export default function Admin() {
   const [as, setAs] = useState<any[] | null>(null); const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
   const [f, setF] = useState({ action: "suspend_user", handle: "", role: "moderator", reason: "" });
   const [lh, setLh] = useState(""); const [lu, setLu] = useState<any | null>(null);
-  const [users, setUsers] = useState<any[] | null>(null); const [ua, setUa] = useState({ handle: "", action: "suspend_user", role: "moderator", reason: "" });
+  const [users, setUsers] = useState<any[] | null>(null);
+  const [funnel, setFunnel] = useState<Record<string, number> | null>(null);
+  useEffect(() => { api("/api/admin/funnel").then((r) => setFunnel(r.totals)).catch(() => undefined); }, []); const [ua, setUa] = useState({ handle: "", action: "suspend_user", role: "moderator", reason: "" });
   const load = useCallback(() => api("/api/admin/actions").then((r) => setAs(r.actions)).catch((e) => setErr(errMsg(e))), []);
   useEffect(() => { load(); }, [load]);
   async function request(e: React.FormEvent) {
@@ -36,6 +38,7 @@ export default function Admin() {
       <h1>Break-glass administration</h1>
       <p className="muted small">Every action needs two administrators: one requests, a different one approves. Both steps are written to the audit log. Requests expire after 24 hours.</p>
       {err && <div className="alert err">{err}</div>}{msg && <div className="alert ok">{msg}</div>}
+      {funnel && <div className="card"><h2>Funnel (last 30 days)</h2><p className="muted small" style={{ margin: 0 }}>Opened {funnel.opened ?? 0} · Signed up {funnel.signup_completed ?? 0} · Reached {funnel.reached ?? 0} · Loop codes {funnel.loop_code_created ?? 0}{funnel.reached ? ` · Conversion ${Math.round(((funnel.loop_code_created ?? 0) / funnel.reached) * 100)}%` : ""}</p></div>}
       <div className="card">
         <h2>Users</h2>
         <p className="muted small">Every account on this server, with the actions you can take directly.</p>

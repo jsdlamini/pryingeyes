@@ -105,6 +105,7 @@ async function startGateInner(ctx: AuthCtx, input: { code: string; captcha?: str
 
   // Resume an open request for this token without spending budget (reload, back button).
   const token = await findByCode(input.code);
+  if (token) { const { bumpOpenedOnce } = await import("./funnel"); void bumpOpenedOnce(token.id, ip); }
   if (token && token.status === "active") {
     const [open] = await db().select().from(schema.decodeRequests)
       .where(and(eq(schema.decodeRequests.tokenId, token.id), eq(schema.decodeRequests.callerId, callerId),

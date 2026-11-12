@@ -36,7 +36,7 @@ export default function ContentAdmin() {
   }
   async function runNow() {
     setErr(""); setMsg("");
-    try { await api("/api/admin/content/run", { method: "POST" }); setMsg("Ran the bot loop (fetch + extract)."); await loadState(); await loadItems(); await loadSources(); } catch (x) { setErr(errMsg(x)); }
+    try { const r = await api("/api/admin/content/run", { method: "POST" }); const k = r.run ?? {}; setMsg(`Ran: fetched ${k.fetched ?? 0}, ${k.newItems ?? 0} new, extracted ${k.extracted ?? 0}, posted ${k.posted ?? 0}, expired ${k.expired ?? 0}.`); await loadState(); await loadItems(); await loadSources(); } catch (x) { setErr(errMsg(x)); }
   }
   async function addSource(e: React.FormEvent) {
     e.preventDefault(); setErr(""); setMsg("");

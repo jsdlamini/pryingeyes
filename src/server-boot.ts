@@ -12,7 +12,7 @@ import { isMemoryRedis } from "@/lib/redis";
 import { grantConfiguredAdmins } from "@/lib/bootstrap-admins";
 import { runRetention } from "@/lib/retention";
 import { sweepCalls } from "@/lib/calls";
-import { tickContentBot } from "@/lib/content";
+import { seedStarterSources, tickContentBot } from "@/lib/content";
 
 const g = globalThis as unknown as { __peBooted?: Promise<void> };
 
@@ -58,6 +58,7 @@ async function start() {
   setInterval(() => { sweepCalls(true).catch((x) => console.error("call sweep failed", x instanceof Error ? x.message : x)); }, 10_000).unref();
   // The content bot fetches public notices on its own timer; it is off unless CONTENT_BOT=on and starts paused.
   if (e.CONTENT_BOT === "on") {
+    void seedStarterSources().catch((x) => console.error("content source seed failed", x instanceof Error ? x.message : x));
     const tick = () => tickContentBot().catch((x) => console.error("content bot run failed", x instanceof Error ? x.message : x));
     void tick();
     setInterval(tick, 15 * 60_000).unref();

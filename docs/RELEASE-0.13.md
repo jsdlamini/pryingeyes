@@ -1,24 +1,29 @@
-# PryingEyes 0.13 — content bot, Phase 4 (posting, pace and stats)
+# PryingEyes 0.13 — content bot
 
-On top of Phase 3. No new migration — the posting flow reuses `content_items.post_id` and the existing `posts.expires_at`.
+Migration `0023_ai_extraction` runs automatically on start. (Phase 4 and 5 need no new migration.)
 
-## What changed
+## Phase 3 — AI extraction
 
-| Area | Files | Change |
-| --- | --- | --- |
-| Setting | `src/lib/env.ts` | `CONTENT_BOT_DAILY_CAP` (default 10) — how many notice posts the bot may make in a day. |
-| Posting | `src/lib/social.ts`, `src/lib/content.ts` | `createPost` now accepts an optional expiry; `postReadyItems()` posts `ready` items into their routed group as the bot, up to the daily cap, and marks them `posted`. |
-| Post text | `src/lib/content.ts` | Summary (own words) + `Source: <url>` + `Apply by: <date>`. If a summary still contains contact details it is held as `needs_review` rather than posted. |
-| Expiry | `src/lib/content.ts` | `expireBotPosts()` removes bot posts whose deadline has passed and marks their items `expired`. |
-| Stats | `src/lib/content.ts`, `/api/admin/content/stats`, `/admin/content` | A Stats tab: today vs the daily cap, posts per day (14 days), posted-by-kind and the queue by status. |
-| Admin entry | `src/app/admin/page.tsx` | The break-glass admin page now links to the content bot. |
-| Prompt | `src/lib/content-ai.ts` | The summariser is told never to include phone numbers or email addresses. |
-| Tests | `tests/unit/content-post.test.ts` (new), content-ai prompt assertion | Post-text shape and the contact-details instruction. |
+- `AI_PROVIDER=off/openai-compatible`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` (validated together).
+- `content_items.summary` + `confidence`; `content_sources.trust`.
+- `src/lib/content-ai.ts`: fixed zod form, `parseAiResponse`, `summarizeNotice`, `SYSTEM_PROMPT`, `CONFIDENCE_THRESHOLD` (0.7).
+- The run loop summarises `new` items; confident ones become `ready`, the rest `needs_review`. Each result nudges source trust.
+- Anti-injection: the prompt treats the notice as data and never follows it; the zod schema bounds the reply, so hijacked output is discarded.
 
-## The flow now, end to end
+## Phase 4 — posting, pace and stats
 
-fetch → queue (`new`) → AI summarise → `ready` (confident) or `needs_review` → post into the routed group (paced by the daily cap) → expire at the deadline.
+- `CONTENT_BOT_DAILY_CAP` (default 10) paces posting.
+- `createPost` accepts an expiry; `postReadyItems()` posts `ready` items into their routed group as the bot, auto-joining, and marks them `posted`. Post text = summary + `Source: <url>` + `Apply by: <date>`.
+- A summary that still contains contact details is held as `needs_review`.
+- `expireBotPosts()` removes posts whose deadline has passed.
+- A Stats tab (today vs cap, posts per day, posted-by-kind, queue by status) under `/admin/content`; the break-glass `/admin` page links to the bot.
 
-## Remaining (Phase 5)
+## Phase 5 — Eswatini starter sources
 
-The Eswatini starter sources — a researched list loaded disabled, so the bot has real places to watch as soon as you turn it on.
+Eight official Eswatini public-notice pages are seeded automatically on first boot (when the source list is empty), all **disabled**. The admin reviews and enables the ones that are live; the SSRF-guarded fetcher fails safely on any that are not. URLs are best-known candidates and should be verified before enabling.
+
+Also in this pass: **Run now** forces a run even while the bot is paused, and reports `fetched / new / extracted / posted / expired`, so it is never silent.
+
+## To run it
+
+`CONTENT_BOT=on` + the AI variables in `.env`, restart, then in `/admin/content`: Resume (or Run now), enable sources, set routes, and watch the Queue.

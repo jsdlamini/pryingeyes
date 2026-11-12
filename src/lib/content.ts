@@ -260,10 +260,10 @@ async function sourceDue(s: typeof schema.contentSources.$inferSelect): Promise<
 }
 
 /** Fetch every due source, extract items with rules, and put new ones in the queue. */
-export async function tickContentBot(): Promise<void> {
-  if (env().CONTENT_BOT !== "on") return;
+export async function tickContentBot(force = false): Promise<{ fetched: number; newItems: number; extracted: number; posted: number; expired: number }> {
+  if (env().CONTENT_BOT !== "on") return { fetched: 0, newItems: 0, extracted: 0, posted: 0, expired: 0 };
   const [state] = await db().select().from(schema.contentState).where(eq(schema.contentState.id, 1));
-  if (state?.paused) return;
+  if (state?.paused && !force) return { fetched: 0, newItems: 0, extracted: 0, posted: 0, expired: 0 };
   const sources = await db().select().from(schema.contentSources);
   let fetched = 0, newItems = 0;
   for (const s of sources) {
@@ -296,6 +296,7 @@ export async function tickContentBot(): Promise<void> {
   const posted = await postReadyItems();
   const expired = await expireBotPosts();
   if (fetched || extracted || posted || expired) console.log(`content bot: fetched ${fetched} sources, ${newItems} new items, extracted ${extracted}, posted ${posted}, expired ${expired}`);
+  return { fetched, newItems, extracted, posted, expired };
 }
 
 
@@ -382,4 +383,32 @@ export async function contentStats(days = 14) {
     daily: daily.map((d) => ({ day: d.day, count: d.c })),
     byCategory, byStatus,
   };
+}
+
+
+// ── Eswatini starter sources (loaded disabled) ─────────────────────
+
+/** Researched Eswatini public-notice pages, loaded disabled for the admin to review and enable.
+ *  URLs are best-known candidates; verify each before enabling (the fetcher fails safely otherwise). */
+export const STARTER_SOURCES: Array<{ name: string; url: string; category: ContentCategory; country: string; intervalHours: number; rules: string | null }> = [
+  { name: "EPPRA — tenders", url: "https://www.eppra.co.sz/", category: "tender", country: "SZ", intervalHours: 24, rules: null },
+  { name: "Government of Eswatini — vacancies", url: "https://www.gov.sz/vacancies", category: "job", country: "SZ", intervalHours: 24, rules: null },
+  { name: "Government of Eswatini — tenders", url: "https://www.gov.sz/tenders", category: "tender", country: "SZ", intervalHours: 24, rules: null },
+  { name: "Central Bank of Eswatini — notices", url: "https://www.centralbank.org.sz/", category: "service_notice", country: "SZ", intervalHours: 24, rules: null },
+  { name: "Central Bank of Eswatini — scam alerts", url: "https://www.centralbank.org.sz/scam-alerts/", category: "scam_alert", country: "SZ", intervalHours: 48, rules: null },
+  { name: "ESCCOM — consumer alerts", url: "https://www.esccom.org.sz/", category: "scam_alert", country: "SZ", intervalHours: 48, rules: null },
+  { name: "Eswatini Meteorological Service — weather", url: "https://www.swazimet.gov.sz/", category: "weather", country: "SZ", intervalHours: 12, rules: null },
+  { name: "Eswatini Government — scholarships", url: "https://www.gov.sz/scholarships", category: "scholarship", country: "SZ", intervalHours: 48, rules: null },
+];
+
+/** Load the starter sources once, disabled, when the source list is empty. */
+export async function seedStarterSources(): Promise<number> {
+  const [c] = await db().select({ n: sql<number>`count(*)::int` }).from(schema.contentSources);
+  if (c.n > 0) return 0;
+  let n = 0;
+  for (const s of STARTER_SOURCES) {
+    await db().insert(schema.contentSources).values({ name: s.name, url: s.url, category: s.category, country: s.country, mode: "rules", enabled: false, intervalHours: s.intervalHours, rules: s.rules });
+    n += 1;
+  }
+  return n;
 }

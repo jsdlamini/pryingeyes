@@ -126,6 +126,7 @@ export function PostCard({ p, onChanged, following, onFollow }: {
                 <button type="button" className="handle-btn" onClick={() => setHandleOpen((x) => !x)} aria-expanded={handleOpen} aria-haspopup="true">
                   @{p.author.handle} <Icon name="chevron" size={13} />
                 </button>
+                {p.author.handle === "pryingeyes_bot" ? <span className="bot-tag">Bot</span> : null}
                 {handleOpen && (
                   <div className="handle-pop" role="menu">
                     {p.code?.live ? (

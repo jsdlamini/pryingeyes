@@ -874,3 +874,5 @@ video.post-attach.video, video.comment-attach.video, video.msg-attach.video { ma
   .print-card-line { font-size: 11pt; color: #33506B; }
 }
 .share-texts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+.bot-tag { font-size: .68rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent-2); border-radius: 999px; padding: 1px 7px; }

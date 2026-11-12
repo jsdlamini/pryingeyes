@@ -2,11 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { env } from "./env";
 
-/** Known region names/codes per country. Cloudflare sends `cf-region-code` (ISO 3166-2, e.g. SZ-HH)
- *  or `cf-region` (the plain name). Other countries get no region until they're added here. */
+/** Known region names/codes per country. Cloudflare sends `cf-region-code` (either "SZ-HH" or the
+ *  bare "HH") or `cf-region` (the plain name, sometimes with a " Region" suffix). Other countries
+ *  get no region until they're added here. */
 const KNOWN_REGIONS: Record<string, Record<string, string>> = {
   SZ: {
     "SZ-HH": "Hhohho", "SZ-MA": "Manzini", "SZ-LU": "Lubombo", "SZ-SH": "Shiselweni",
+    HH: "Hhohho", MA: "Manzini", LU: "Lubombo", SH: "Shiselweni",
     Hhohho: "Hhohho", Manzini: "Manzini", Lubombo: "Lubombo", Shiselweni: "Shiselweni",
   },
 };
@@ -17,10 +19,13 @@ function regionFor(country: string, code: string | null): string | null {
   if (!known) return null;
   const c = code.trim();
   if (known[c]) return known[c];
-  if (c.toUpperCase().startsWith(country.toUpperCase() + "-")) {
-    const suffix = c.slice(3);
-    if (known[suffix]) return known[suffix];
-  }
+  // "Hhohho Region" -> "Hhohho"
+  const stripped = c.replace(/\s+region$/i, "").trim();
+  if (known[stripped]) return known[stripped];
+  const upper = c.toUpperCase();
+  if (known[upper]) return known[upper];
+  // "SZ-HH" -> "HH"
+  if (upper.startsWith(country.toUpperCase() + "-") && known[upper.slice(3)]) return known[upper.slice(3)];
   return null;
 }
 

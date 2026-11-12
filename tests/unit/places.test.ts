@@ -6,11 +6,17 @@ function req(headers: Record<string, string>) {
 }
 
 describe("placesFromRequest", () => {
-  it("uses CF-IPCountry and cf-region-code", () => {
+  it("uses CF-IPCountry and cf-region-code (ISO)", () => {
     expect(placesFromRequest(req({ "cf-ipcountry": "SZ", "cf-region-code": "SZ-MA" }))).toEqual({ country: "SZ", region: "Manzini" });
+  });
+  it("uses the bare region code Cloudflare actually sends", () => {
+    expect(placesFromRequest(req({ "cf-ipcountry": "SZ", "cf-region-code": "HH" }))).toEqual({ country: "SZ", region: "Hhohho" });
   });
   it("maps the plain region name", () => {
     expect(placesFromRequest(req({ "cf-ipcountry": "SZ", "cf-region": "Lubombo" }))).toEqual({ country: "SZ", region: "Lubombo" });
+  });
+  it("maps the 'X Region' suffix Cloudflare actually sends", () => {
+    expect(placesFromRequest(req({ "cf-ipcountry": "SZ", "cf-region": "Hhohho Region" }))).toEqual({ country: "SZ", region: "Hhohho" });
   });
   it("falls back to DEFAULT_COUNTRY with no header", () => {
     const p = placesFromRequest(req({}));

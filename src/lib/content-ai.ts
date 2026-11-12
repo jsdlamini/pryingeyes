@@ -45,7 +45,6 @@ export async function summarizeNotice(input: SummarizeInput): Promise<AiExtracti
   const base = e.AI_BASE_URL.replace(/\/+$/, "");
   const body: Record<string, unknown> = {
     model: e.AI_MODEL,
-    temperature: 0.2,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: `Category hint: ${input.category}\nCountry hint: ${input.country}\n\nNotice title: ${input.title}\n\nNotice text:\n${input.body.slice(0, 6000)}` },

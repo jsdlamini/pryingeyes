@@ -332,11 +332,11 @@ export async function postReadyItems(): Promise<number> {
   const items = await db().select().from(schema.contentItems)
     .where(eq(schema.contentItems.status, "ready"))
     .orderBy(asc(schema.contentItems.createdAt)).limit(50);
-  let posted = 0;
+  let posted = 0, readyNoRoute = 0;
   for (const it of items) {
     if (posted >= budget) break;
     const route = routes.find((r) => r.country === it.country && r.category === it.category);
-    if (!route) continue;
+    if (!route) { readyNoRoute += 1; continue; }
     await ensureBotMember(botId, route.groupId);
     try {
       const { id } = await createPost(botId, { groupId: route.groupId, text: buildPostText(it), expiresAt: it.deadline ?? null });
@@ -350,6 +350,7 @@ export async function postReadyItems(): Promise<number> {
       log.warn({ err, item: it.id }, "content bot post failed");
     }
   }
+  if (readyNoRoute) log.warn({ readyNoRoute }, "content bot: ready items have no matching route");
   return posted;
 }
 

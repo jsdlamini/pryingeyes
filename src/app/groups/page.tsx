@@ -6,6 +6,7 @@ import { api, errMsg, relTime } from "@/components/api";
 import { Icon } from "@/components/Icon";
 import { Composer, PostCard, type PostView } from "@/components/Social";
 import { StatusViewer } from "@/components/StatusViewer";
+import { Notices } from "@/components/Notices";
 
 type G = { id: string; name: string; role: string; members: number; lastPostAt: string | null; requests: number };
 type Found = { id: string; name: string; about: string; members: number; joined: boolean; requested: boolean; official: boolean; country: string | null };
@@ -83,6 +84,7 @@ export default function Feed() {
 
       <div className="feed-layout">
         <main className="feed-main">
+          <Notices />
           {/* 24-hour status rings */}
           <section className="card card-tight status-faded" aria-label="Live statuses">
             <div className="status-strip">

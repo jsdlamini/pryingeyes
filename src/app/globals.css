@@ -878,3 +878,12 @@ video.post-attach.video, video.comment-attach.video, video.msg-attach.video { ma
 .bot-tag { font-size: .68rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent-2); border-radius: 999px; padding: 1px 7px; }
 
 .official-badge { font-size: .68rem; font-weight: 700; color: var(--good, #1a7f4b); border: 1px solid var(--good-2, #1a7f4b); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+
+/* Public notices board on the dashboard */
+.notices-strip { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 10px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.notice-card { flex: 0 0 264px; scroll-snap-align: start; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; background: var(--card); }
+.notice-cat { font-size: .7rem; font-weight: 700; border: 1px solid; border-radius: 999px; padding: 1px 8px; }
+.notice-flag { font-size: .78rem; color: var(--muted); }
+.notice-text { font-size: .85rem; line-height: 1.35; margin: 0; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.notice-deadline { font-size: .72rem; font-weight: 600; color: var(--muted); }
+.notice-source { font-size: .75rem; font-weight: 600; color: var(--accent); text-decoration: none; }

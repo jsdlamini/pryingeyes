@@ -9,14 +9,13 @@ export async function listNotices(userId: string, limit = 15) {
   const botId = await botAccountId();
   const [me] = await db().select({ hc: schema.users.homeCountry, ec: schema.users.extraCountries }).from(schema.users).where(eq(schema.users.id, userId));
   const mine = new Set(personCountries({ home_country: me?.hc ?? null, extra_countries: me?.ec ?? [] }));
-  const official = await db().select({ id: schema.groups.id, name: schema.groups.name }).from(schema.groups).where(eq(schema.groups.official, true));
-  if (!official.length) return [];
-  const gids = official.map((g) => g.id);
-  const byName = new Map(official.map((g) => [g.id, g.name]));
   const rows = await db().select().from(schema.posts)
-    .where(and(eq(schema.posts.authorId, botId), inArray(schema.posts.groupId, gids),
+    .where(and(eq(schema.posts.authorId, botId),
       or(isNull(schema.posts.expiresAt), sql`${schema.posts.expiresAt} > now()`)))
     .orderBy(desc(schema.posts.createdAt)).limit(limit * 3);
+  const gids = [...new Set(rows.map((r) => r.groupId).filter((x): x is string => !!x))];
+  const groups = gids.length ? await db().select({ id: schema.groups.id, name: schema.groups.name }).from(schema.groups).where(inArray(schema.groups.id, gids)) : [];
+  const byName = new Map(groups.map((g) => [g.id, g.name]));
   const pids = rows.map((p) => p.id);
   const items = pids.length ? await db().select().from(schema.contentItems).where(inArray(schema.contentItems.postId, pids)) : [];
   const meta = new Map(items.filter((i) => i.postId).map((i) => [i.postId as string, i]));

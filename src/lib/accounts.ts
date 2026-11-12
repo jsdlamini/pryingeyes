@@ -50,7 +50,7 @@ export function safeNext(next?: string | null): string | null {
   return next && /^\/(?!\/)[\w\-./?=&%]*$/.test(next) && next.length <= 200 ? next : null;
 }
 
-export async function signupEmail(input: { email: string; password: string; handle?: string | null; ageConfirmed: boolean; next?: string | null }, ip: string) {
+export async function signupEmail(input: { email: string; password: string; handle?: string | null; ageConfirmed: boolean; next?: string | null; country?: string; region?: string | null }, ip: string) {
   const b = await authBudgets.signupIp(ip);
   if (!b.allowed) throw tooMany(b.retryAfter);
   if (!input.ageConfirmed) throw badRequest("age_required", "PryingEyes is for people aged 18 or over.");
@@ -72,7 +72,7 @@ export async function signupEmail(input: { email: string; password: string; hand
   }
   const passwordHash = await hashPassword(input.password);
   const u = await withHandle(input.handle, async (handle) =>
-    (await db().insert(schema.users).values({ handle, email, passwordHash, ageConfirmedAt: new Date(), status: "pending" }).returning())[0]);
+    (await db().insert(schema.users).values({ handle, email, passwordHash, ageConfirmedAt: new Date(), status: "pending", homeCountry: input.country ?? null, homeRegion: input.region ?? null, placesSource: "detected" }).returning())[0]);
   await audit({ type: "account.created", actorId: u.id, ownerId: u.id, payload: { method: "email" } });
   { const { bumpFromNext } = await import("./funnel"); void bumpFromNext(input.next, "signup_started"); }
   try {
@@ -244,6 +244,6 @@ export async function accountSummary(userId: string) {
     hasPassword: !!u.passwordHash, totp: !!totp?.confirmedAt, passkeys: pk,
     recoveryCodesLeft: rc.filter((r) => !r.usedAt).length,
     recovery: rec ? { availableAt: rec.availableAt } : null,
-    auditRetentionMonths: u.auditRetentionMonths, readReceipts: u.readReceipts, doNotDisturb: u.doNotDisturb, avatarUrl: u.avatarUrl, shareCodeByDefault: u.shareCodeByDefault, panicAt: u.panicAt,
+    auditRetentionMonths: u.auditRetentionMonths, readReceipts: u.readReceipts, doNotDisturb: u.doNotDisturb, avatarUrl: u.avatarUrl, shareCodeByDefault: u.shareCodeByDefault, homeCountry: u.homeCountry, homeRegion: u.homeRegion, placesSource: u.placesSource, extraCountries: u.extraCountries, panicAt: u.panicAt,
   };
 }

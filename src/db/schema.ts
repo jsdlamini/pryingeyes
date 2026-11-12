@@ -54,6 +54,12 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   shareCodeByDefault: boolean("share_code_by_default").notNull().default(true),
   loopPrompt: text("loop_prompt"),
+  homeCountry: text("home_country"),
+  homeRegion: text("home_region"),
+  placesSource: text("places_source").notNull().default("detected"),
+  extraCountries: text("extra_countries").array().notNull().default(sql`'{}'::text[]`),
+  seenCountry: text("seen_country"),
+  seenSince: timestamp("seen_since", { withTimezone: true }),
   panicAt: timestamp("panic_at", { withTimezone: true }),
   totpLastStep: bigint("totp_last_step", { mode: "number" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -328,6 +334,10 @@ export const groups = pgTable("groups", {
   lastPostAt: timestamp("last_post_at", { withTimezone: true }),
   // Listed groups appear in search, so anyone can ask to join. Unlisted ones are reached by invite link only.
   listed: boolean("listed").notNull().default(true),
+  country: text("country"),
+  region: text("region"),
+  topic: text("topic"),
+  official: boolean("official").notNull().default(false),
 }, (t) => [uniqueIndex("groups_invite_uq").on(t.inviteHash)]);
 
 /** Asking to join a group. Only the group's creator or admins can approve (or decline) it. */

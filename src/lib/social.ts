@@ -234,6 +234,13 @@ async function groupCard(userId: string, g: Group) {
 async function askToJoin(userId: string, g: Group, note: string, via: "search" | "invite") {
   if (await roleIn(userId, g.id)) return { id: g.id, status: "member" as const };
   if (await hasRequested(userId, g.id)) return { id: g.id, status: "requested" as const };
+  // Official public notice boards join open, with no approval.
+  if (g.official) {
+    await db().insert(schema.groupMembers).values({ groupId: g.id, userId, role: "member" }).onConflictDoNothing();
+    await audit({ type: "group.joined", actorId: userId, subjectType: "group", subjectId: g.id, payload: { open: true } });
+    await notify(userId, { kind: "group_joined", title: `You're in “${g.name}”`, body: "This is a public notice board.", link: `/groups/${g.id}` }).catch(() => undefined);
+    return { id: g.id, status: "member" as const };
+  }
   const n = (note ?? "").trim().slice(0, 200);
   if (n) assertNoContactInfo(n, "note");
   const b = await hit(`group:ask:${userId}`, 20, 3600);
@@ -407,7 +414,14 @@ export async function createPost(authorId: string, i: { groupId: string | null; 
   }
   let place = { groupId: null as string | null, label: "Status updates" };
   if (i.groupId) {
-    const { g } = await memberGroup(authorId, i.groupId);
+    const { g, role } = await memberGroup(authorId, i.groupId);
+    if (g.official) {
+      const { botAccountId } = await import("./bot");
+      const [u] = await db().select({ r: schema.users.roles }).from(schema.users).where(eq(schema.users.id, authorId));
+      const isBot = authorId === await botAccountId();
+      const isMod = (u?.r ?? []).includes("content_moderator") || (u?.r ?? []).includes("admin");
+      if (!isBot && !isMod && role !== "admin") throw forbidden("official_readonly", "Only the bot and moderators post in this notice board.");
+    }
     place = { groupId: g.id, label: `Group: ${g.name}` };
   }
   const b = await hit(`post:${authorId}`, 30, 3600);

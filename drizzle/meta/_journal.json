@@ -148,6 +148,13 @@
       "when": 1794393380698,
       "tag": "0020_funnel_daily",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794480357576,
+      "tag": "0021_places",
+      "breakpoints": true
     }
   ]
 }

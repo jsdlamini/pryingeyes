@@ -76,6 +76,25 @@ export default function Settings() {
             <td>{!s.current && <button className="btn ghost sm" onClick={() => run(() => api(`/api/auth/sessions/${s.id}`, { method: "DELETE" }), "Device signed out.")}><Icon name="logout" size={16} />Sign out</button>}</td></tr>))}</tbody></table>
       </div>
 
+      <div className="card stack">
+        <h2>Places</h2>
+        <p className="muted small" style={{ margin: 0 }}>Detected automatically from your connection. Change it if you'd like.</p>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor="hc">Country</label>
+          <select id="hc" value={u.homeCountry ?? "SZ"} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { homeCountry: e.target.value, placesSource: "chosen" } }), "Saved.")}>
+            {["SZ", "ZA", "MZ", "BW", "LS", "ZW", "NA", "ZM"].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor="hr">Region</label>
+          <select id="hr" value={u.homeRegion ?? ""} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { homeRegion: e.target.value || null, placesSource: "chosen" } }), "Saved.")}>
+            <option value="">Whole country</option>
+            {["Hhohho", "Manzini", "Lubombo", "Shiselweni"].map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        <p className="muted tiny" style={{ margin: 0 }}>{u.placesSource === "detected" ? `Showing ${u.homeCountry ?? "SZ"}${u.homeRegion ? ` · ${u.homeRegion}` : ""} — detected automatically.` : "You chose these places."}</p>
+        <button className="btn ghost sm" onClick={() => run(() => api("/api/me/settings", { method: "PATCH", body: { placesSource: "detected" } }), "Saved.")} style={{ alignSelf: "flex-start" }}>Use detected location</button>
+      </div>
       <div className="card">
         <h2>Privacy</h2>
         <div className="grid2">

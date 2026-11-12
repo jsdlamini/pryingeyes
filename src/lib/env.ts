@@ -28,6 +28,8 @@ const schema = z.object({
   BACKGROUND_JOBS: z.enum(["on", "off"]).default("on"),
   // The content bot (public notices). Off unless turned on; even then it starts paused until an admin resumes it.
   CONTENT_BOT: z.enum(["on", "off"]).default("off"),
+  // How many notice posts the bot may make in one day (a gentle pace so it never floods a board).
+  CONTENT_BOT_DAILY_CAP: int(10),
   // The bot's AI summariser. openai-compatible works with OpenAI, Groq, OpenRouter and local servers.
   AI_PROVIDER: z.enum(["off", "openai-compatible"]).default("off"),
   AI_BASE_URL: z.string().default(""),   // e.g. https://api.openai.com/v1

@@ -4,6 +4,7 @@ import { api, errMsg, relTime } from "@/components/api";
 import { passkeysSupported, registerPasskey } from "@/components/passkey";
 import { TotpSetup } from "@/components/TotpSetup";
 import { RecoveryCodes } from "@/components/RecoveryCodes";
+import { countryLabel } from "@/lib/countries";
 import { Icon } from "@/components/Icon";
 
 export default function Settings() {
@@ -82,7 +83,7 @@ export default function Settings() {
         <div className="field" style={{ marginBottom: 0 }}>
           <label htmlFor="hc">Country</label>
           <select id="hc" value={u.homeCountry ?? "SZ"} onChange={(e) => run(() => api("/api/me/settings", { method: "PATCH", body: { homeCountry: e.target.value, placesSource: "chosen" } }), "Saved.")}>
-            {["SZ", "ZA", "MZ", "BW", "LS", "ZW", "NA", "ZM"].map((c) => <option key={c} value={c}>{c}</option>)}
+            {["SZ", "ZA", "MZ", "BW", "LS", "ZW", "NA", "ZM"].map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
           </select>
         </div>
         <div className="field" style={{ marginBottom: 0 }}>
@@ -92,7 +93,7 @@ export default function Settings() {
             {["Hhohho", "Manzini", "Lubombo", "Shiselweni"].map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
-        <p className="muted tiny" style={{ margin: 0 }}>{u.placesSource === "detected" ? `Showing ${u.homeCountry ?? "SZ"}${u.homeRegion ? ` · ${u.homeRegion}` : ""} — detected automatically.` : "You chose these places."}</p>
+        <p className="muted tiny" style={{ margin: 0 }}>{u.placesSource === "detected" ? `Showing ${countryLabel(u.homeCountry ?? "SZ")}${u.homeRegion ? ` · ${u.homeRegion}` : ""} — detected automatically.` : "You chose these places."}</p>
         <button className="btn ghost sm" onClick={() => run(() => api("/api/me/settings", { method: "PATCH", body: { placesSource: "detected" } }), "Saved.")} style={{ alignSelf: "flex-start" }}>Use detected location</button>
       </div>
       <div className="card">

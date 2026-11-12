@@ -1,12 +1,13 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { api, errMsg, relTime } from "@/components/api";
+import { countryLabel } from "@/lib/countries";
 
 const CATS = ["job", "scholarship", "scam_alert", "tender", "service_notice", "weather"] as const;
 const CAT_LABEL: Record<string, string> = { job: "Jobs", scholarship: "Scholarships", scam_alert: "Scam alerts", tender: "Tenders", service_notice: "Service notices", weather: "Weather" };
 const COUNTRIES = ["SZ", "ZA", "MZ", "BW", "LS", "ZW", "NA", "ZM"];
 
-type Tab = "queue" | "sources" | "routes";
+type Tab = "queue" | "sources" | "routes" | "stats";
 
 export default function ContentAdmin() {
   const [tab, setTab] = useState<Tab>("queue");
@@ -18,14 +19,16 @@ export default function ContentAdmin() {
   const [err, setErr] = useState(""); const [msg, setMsg] = useState("");
   const [src, setSrc] = useState({ name: "", url: "", category: "job", country: "SZ", intervalHours: 6, mode: "rules", rules: "" });
   const [route, setRoute] = useState({ country: "SZ", category: "job", groupId: "" });
+  const [stats, setStats] = useState<any | null>(null);
 
   const loadState = useCallback(() => api("/api/admin/content/state").then((r) => setState(r.state)).catch((e) => setErr(errMsg(e))), []);
   const loadSources = useCallback(() => api("/api/admin/content/sources").then((r) => setSources(r.sources)).catch((e) => setErr(errMsg(e))), []);
   const loadItems = useCallback(() => api("/api/admin/content/items?status=all").then((r) => setItems(r.items)).catch((e) => setErr(errMsg(e))), []);
   const loadRoutes = useCallback(() => api("/api/admin/content/routes").then((r) => setRoutes(r.routes)).catch((e) => setErr(errMsg(e))), []);
   const loadGroups = useCallback(() => api("/api/groups").then((r) => setGroups(r.groups ?? [])).catch(() => undefined), []);
+  const loadStats = useCallback(() => api("/api/admin/content/stats").then((r) => setStats(r.stats)).catch((e) => setErr(errMsg(e))), []);
 
-  useEffect(() => { loadState(); loadSources(); loadItems(); loadRoutes(); loadGroups(); }, [loadState, loadSources, loadItems, loadRoutes, loadGroups]);
+  useEffect(() => { loadState(); loadSources(); loadItems(); loadRoutes(); loadGroups(); loadStats(); }, [loadState, loadSources, loadItems, loadRoutes, loadGroups, loadStats]);
 
   async function pause(v: boolean) {
     setErr(""); setMsg("");
@@ -82,7 +85,7 @@ export default function ContentAdmin() {
       )}
 
       <div className="row" style={{ gap: 6, margin: "12px 0" }}>
-        {(["queue", "sources", "routes"] as Tab[]).map((t) => (
+        {(["queue", "sources", "routes", "stats"] as Tab[]).map((t) => (
           <button key={t} className={`btn sm ${tab === t ? "" : "ghost"}`} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>
         ))}
       </div>
@@ -100,7 +103,7 @@ export default function ContentAdmin() {
                     <br /><span className="muted tiny">{it.sourceName ?? "?"} · <a href={it.url} target="_blank" rel="noreferrer noopener">source</a></span>
                   </td>
                   <td className="small">{CAT_LABEL[it.category] ?? it.category}</td>
-                  <td className="small">{it.country}{it.region ? ` · ${it.region}` : ""}</td>
+                  <td className="small">{countryLabel(it.country)}{it.region ? ` · ${it.region}` : ""}</td>
                   <td className="small">{it.deadline ? relTime(it.deadline) : "—"}</td>
                   <td className="small">{it.status}{it.confidence != null ? ` · ${Math.round(it.confidence * 100)}%` : ""}</td>
                   <td><div className="row" style={{ gap: 4 }}>
@@ -122,7 +125,7 @@ export default function ContentAdmin() {
             </div>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select value={src.category} onChange={(e) => setSrc({ ...src, category: e.target.value })}>{CATS.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}</select>
-              <select value={src.country} onChange={(e) => setSrc({ ...src, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+              <select value={src.country} onChange={(e) => setSrc({ ...src, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}</select>
               <label className="small">Every <input type="number" min={1} max={168} value={src.intervalHours} onChange={(e) => setSrc({ ...src, intervalHours: Number(e.target.value) })} style={{ width: 70 }} /> hours</label>
               <select value={src.mode} onChange={(e) => setSrc({ ...src, mode: e.target.value })}><option value="rules">rules</option><option value="ai">ai</option></select>
               <button className="btn sm">Add</button>
@@ -135,7 +138,7 @@ export default function ContentAdmin() {
                 <tr key={s.id}>
                   <td className="small"><b>{s.name}</b><br /><span className="muted tiny">{s.url}</span></td>
                   <td className="small">{CAT_LABEL[s.category] ?? s.category} · {s.mode}</td>
-                  <td className="small">{s.country}</td>
+                  <td className="small">{countryLabel(s.country)}</td>
                   <td className="small">{s.intervalHours}h</td>
                   <td className="small">{Math.round((s.trust ?? 0) * 100)}%</td>
                   <td className="small">{s.lastFetchedAt ? relTime(s.lastFetchedAt) : "never"}</td>
@@ -150,7 +153,7 @@ export default function ContentAdmin() {
           <h2>Routes</h2>
           <p className="muted small">Where each country + kind gets posted. Point them at official notice boards.</p>
           <form onSubmit={addRoute} className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-            <select value={route.country} onChange={(e) => setRoute({ ...route, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+            <select value={route.country} onChange={(e) => setRoute({ ...route, country: e.target.value })}>{COUNTRIES.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}</select>
             <select value={route.category} onChange={(e) => setRoute({ ...route, category: e.target.value })}>{CATS.map((c) => <option key={c} value={c}>{CAT_LABEL[c]}</option>)}</select>
             <select value={route.groupId} onChange={(e) => setRoute({ ...route, groupId: e.target.value })} style={{ minWidth: 180 }}>
               <option value="">Pick a group…</option>
@@ -162,9 +165,26 @@ export default function ContentAdmin() {
             <div className="tablewrap"><table className="tbl"><thead><tr><th>Country</th><th>Kind</th><th>Group</th><th></th></tr></thead>
               <tbody>{routes.map((r) => (
                 <tr key={r.id}>
-                  <td className="small">{r.country}</td><td className="small">{CAT_LABEL[r.category] ?? r.category}</td><td className="small">{r.groupName}</td>
+                  <td className="small">{countryLabel(r.country)}</td><td className="small">{CAT_LABEL[r.category] ?? r.category}</td><td className="small">{r.groupName}</td>
                   <td><button className="btn ghost sm danger" onClick={() => delRoute(r.id)}>Remove</button></td>
                 </tr>))}</tbody></table></div>
+          )}
+        </div>
+      )}
+
+      {tab === "stats" && (
+        <div className="card">
+          <h2>Stats</h2>
+          {!stats ? <p>Loading…</p> : (
+            <>
+              <p className="muted small" style={{ margin: 0 }}>Today: <b>{stats.today}</b> of {stats.cap} posts (daily cap) · queue: {(stats.byStatus ?? []).map((b: any) => `${b.status} ${b.c}`).join(" · ")}</p>
+              <h3 style={{ margin: "10px 0 4px", fontSize: ".85rem" }}>Posts per day (last 14)</h3>
+              <div className="tablewrap"><table className="tbl"><thead><tr><th>Day</th><th>Posts</th></tr></thead>
+                <tbody>{(stats.daily ?? []).map((d: any) => <tr key={d.day}><td className="small">{d.day}</td><td className="small">{d.count}</td></tr>)}</tbody></table></div>
+              <h3 style={{ margin: "10px 0 4px", fontSize: ".85rem" }}>Posted by kind</h3>
+              <div className="tablewrap"><table className="tbl"><thead><tr><th>Kind</th><th>Posts</th></tr></thead>
+                <tbody>{(stats.byCategory ?? []).map((b: any) => <tr key={b.category}><td className="small">{CAT_LABEL[b.category] ?? b.category}</td><td className="small">{b.c}</td></tr>)}</tbody></table></div>
+            </>
           )}
         </div>
       )}

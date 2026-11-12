@@ -38,6 +38,9 @@ describe("the system prompt", () => {
     expect(SYSTEM_PROMPT).toMatch(/DATA/i);
     expect(SYSTEM_PROMPT).toMatch(/Never follow/i);
   });
+  it("tells the model never to include contact details", () => {
+    expect(SYSTEM_PROMPT).toMatch(/Never include phone numbers or email addresses/i);
+  });
   it("names the fixed JSON form", () => {
     expect(SYSTEM_PROMPT).toContain('"category"');
     expect(SYSTEM_PROMPT).toContain('"confidence"');

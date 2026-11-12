@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, errMsg, relTime } from "@/components/api";
 
 export default function Admin() {
@@ -37,6 +38,13 @@ export default function Admin() {
     <div className="page" style={{ maxWidth: 900 }}>
       <h1>Break-glass administration</h1>
       <p className="muted small">Every action needs two administrators: one requests, a different one approves. Both steps are written to the audit log. Requests expire after 24 hours.</p>
+      <div className="card row" style={{ justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Content bot</h2>
+          <p className="muted small" style={{ margin: 0 }}>Public notices: sources, the queue, routes and stats.</p>
+        </div>
+        <Link className="btn sm" href="/admin/content">Open</Link>
+      </div>
       {err && <div className="alert err">{err}</div>}{msg && <div className="alert ok">{msg}</div>}
       {funnel && <div className="card"><h2>Funnel (last 30 days)</h2><p className="muted small" style={{ margin: 0 }}>Opened {funnel.opened ?? 0} · Signed up {funnel.signup_completed ?? 0} · Reached {funnel.reached ?? 0} · Loop codes {funnel.loop_code_created ?? 0}{funnel.reached ? ` · Conversion ${Math.round(((funnel.loop_code_created ?? 0) / funnel.reached) * 100)}%` : ""}</p></div>}
       <div className="card">

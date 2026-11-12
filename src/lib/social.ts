@@ -413,7 +413,7 @@ function cleanText(text: string, hasOther: boolean) {
   return t;
 }
 
-export async function createPost(authorId: string, i: { groupId: string | null; text: string; attach?: Attach | null; attachment?: string | null }) {
+export async function createPost(authorId: string, i: { groupId: string | null; text: string; attach?: Attach | null; attachment?: string | null; expiresAt?: Date | null }) {
   let text: string;
   try { text = cleanText(i.text, !!(i.attach || i.attachment)); assertNoContactInfo(text, i.groupId ? "post" : "status"); }
   catch (e) {
@@ -445,7 +445,7 @@ export async function createPost(authorId: string, i: { groupId: string | null; 
     tokenId: code?.tokenId ?? null,
     codeEnc: code ? await encryptForUser(authorId, JSON.stringify({ short: code.short, link: code.link, tier: i.attach!.tier }), `postcode:${id}`) : null,
     attachment,
-    expiresAt: place.groupId ? null : new Date(Date.now() + STATUS_HOURS * 3600_000),
+    expiresAt: i.expiresAt !== undefined ? i.expiresAt : (place.groupId ? null : new Date(Date.now() + STATUS_HOURS * 3600_000)),
   });
   if (place.groupId) await db().update(schema.groups).set({ lastPostAt: new Date() }).where(eq(schema.groups.id, place.groupId));
   await audit({ type: "post.created", actorId: authorId, subjectType: "post", subjectId: id, payload: { status: !place.groupId, code: !!code } });

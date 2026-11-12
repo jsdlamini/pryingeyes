@@ -5,6 +5,8 @@ import { badRequest, conflict, notFound } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { safeFetchHtml } from "@/lib/safe-fetch";
 import { CONFIDENCE_THRESHOLD, summarizeNotice } from "@/lib/content-ai";
+import { botAccountId } from "@/lib/bot";
+import { createPost } from "@/lib/social";
 
 /** The kinds of public notice the bot collects. */
 export const CONTENT_CATEGORIES = ["job", "scholarship", "scam_alert", "tender", "service_notice", "weather"] as const;
@@ -291,5 +293,93 @@ export async function tickContentBot(): Promise<void> {
   await db().insert(schema.contentState).values({ id: 1, paused: state?.paused ?? true, lastRunAt: new Date(), day: today, dailyCount: newItems })
     .onConflictDoUpdate({ target: schema.contentState.id, set: { lastRunAt: new Date(), day: today, dailyCount: resetDay ? newItems : sql`${schema.contentState.dailyCount} + ${newItems}` } });
   const extracted = await extractDueItems();
-  if (fetched || extracted) console.log(`content bot: fetched ${fetched} sources, ${newItems} new items, extracted ${extracted}`);
+  const posted = await postReadyItems();
+  const expired = await expireBotPosts();
+  if (fetched || extracted || posted || expired) console.log(`content bot: fetched ${fetched} sources, ${newItems} new items, extracted ${extracted}, posted ${posted}, expired ${expired}`);
+}
+
+
+// ── Posting into groups, expiry and stats ─────────────────────────
+
+/** The bot's notice posts for today (used by the daily cap). */
+async function botPostsToday(botId: string): Promise<number> {
+  const [r] = await db().select({ c: sql<number>`count(*)::int` }).from(schema.posts)
+    .where(and(eq(schema.posts.authorId, botId), sql`${schema.posts.createdAt} >= date_trunc('day', now())`));
+  return r?.c ?? 0;
+}
+
+/** Make sure the bot is a member of the group it posts into. */
+async function ensureBotMember(botId: string, groupId: string): Promise<void> {
+  await db().insert(schema.groupMembers).values({ groupId, userId: botId, role: "member" }).onConflictDoNothing();
+}
+
+/** The post text: the summary in the bot's own words, then the source link, then the deadline. */
+export function buildPostText(it: typeof schema.contentItems.$inferSelect): string {
+  const lines = [(it.summary ?? it.body).trim().slice(0, 2000)];
+  if (it.url) lines.push(`Source: ${it.url}`);
+  if (it.deadline) lines.push(`Apply by: ${it.deadline.toISOString().slice(0, 10)}`);
+  return lines.join("\n\n");
+}
+
+/** Post ready items into their routed groups, up to the daily cap. Returns how many it posted. */
+export async function postReadyItems(): Promise<number> {
+  const routes = await db().select().from(schema.contentRoutes);
+  if (!routes.length) return 0;
+  const botId = await botAccountId();
+  const budget = Math.max(0, env().CONTENT_BOT_DAILY_CAP - await botPostsToday(botId));
+  if (budget === 0) return 0;
+  const items = await db().select().from(schema.contentItems)
+    .where(eq(schema.contentItems.status, "ready"))
+    .orderBy(asc(schema.contentItems.createdAt)).limit(50);
+  let posted = 0;
+  for (const it of items) {
+    if (posted >= budget) break;
+    const route = routes.find((r) => r.country === it.country && r.category === it.category);
+    if (!route) continue;
+    await ensureBotMember(botId, route.groupId);
+    try {
+      const { id } = await createPost(botId, { groupId: route.groupId, text: buildPostText(it), expiresAt: it.deadline ?? null });
+      await db().update(schema.contentItems).set({ status: "posted", postId: id, processedAt: new Date() }).where(eq(schema.contentItems.id, it.id));
+      posted += 1;
+    } catch (err) {
+      // A summary with contact details is held for a human rather than posted.
+      if ((err as { code?: string }).code === "contact_info_detected") {
+        await db().update(schema.contentItems).set({ status: "needs_review" }).where(eq(schema.contentItems.id, it.id));
+      }
+      log.warn({ err, item: it.id }, "content bot post failed");
+    }
+  }
+  return posted;
+}
+
+/** Remove bot notice posts whose deadline has passed. Returns how many were removed. */
+export async function expireBotPosts(): Promise<number> {
+  const r = await db().delete(schema.posts)
+    .where(and(sql`${schema.posts.groupId} IS NOT NULL`, sql`${schema.posts.expiresAt} <= now()`))
+    .returning({ id: schema.posts.id });
+  if (r.length) {
+    const ids = r.map((p) => p.id);
+    await db().update(schema.contentItems).set({ status: "expired" }).where(sql`${schema.contentItems.postId} IN ${ids}`);
+  }
+  return r.length;
+}
+
+/** Admin Stats-tab numbers: daily pace, category mix, and the queue. */
+export async function contentStats(days = 14) {
+  const botId = await botAccountId();
+  const cutoff = new Date(Date.now() - days * 86400_000);
+  const [today] = await db().select({ c: sql<number>`count(*)::int` }).from(schema.posts)
+    .where(and(eq(schema.posts.authorId, botId), sql`${schema.posts.createdAt} >= date_trunc('day', now())`));
+  const daily = await db().select({ day: sql<string>`to_char(${schema.posts.createdAt}, 'YYYY-MM-DD')`, c: sql<number>`count(*)::int` })
+    .from(schema.posts).where(and(eq(schema.posts.authorId, botId), sql`${schema.posts.createdAt} >= ${cutoff}`))
+    .groupBy(sql`1`).orderBy(sql`1`);
+  const byCategory = await db().select({ category: schema.contentItems.category, c: sql<number>`count(*)::int` })
+    .from(schema.contentItems).where(eq(schema.contentItems.status, "posted")).groupBy(schema.contentItems.category);
+  const byStatus = await db().select({ status: schema.contentItems.status, c: sql<number>`count(*)::int` })
+    .from(schema.contentItems).groupBy(schema.contentItems.status);
+  return {
+    cap: env().CONTENT_BOT_DAILY_CAP, today: today?.c ?? 0,
+    daily: daily.map((d) => ({ day: d.day, count: d.c })),
+    byCategory, byStatus,
+  };
 }

@@ -1,34 +1,24 @@
-# PryingEyes 0.13 — content bot, Phase 3 (AI extraction)
+# PryingEyes 0.13 — content bot, Phase 4 (posting, pace and stats)
 
-On top of Phase 2. Migration `0023_ai_extraction` runs automatically on start.
+On top of Phase 3. No new migration — the posting flow reuses `content_items.post_id` and the existing `posts.expires_at`.
 
 ## What changed
 
 | Area | Files | Change |
 | --- | --- | --- |
-| Settings | `src/lib/env.ts` | `AI_PROVIDER=off/openai-compatible`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`. Required together when `openai-compatible`. |
-| Tables | `drizzle/0023_ai_extraction.sql`, `src/db/schema.ts` | `content_items.summary` + `confidence`; `content_sources.trust`. |
-| AI module | `src/lib/content-ai.ts` (new) | Fixed JSON form (zod `AI_EXTRACTION_SCHEMA`), `parseAiResponse`, `summarizeNotice`, `SYSTEM_PROMPT`, `CONFIDENCE_THRESHOLD`. |
-| Run loop | `src/lib/content.ts` | After fetching, `extractDueItems()` runs the AI over `new` items; confident ones become `ready`, the rest `needs_review`. Each result nudges the source's trust up or down. |
-| Admin | `/api/admin/content/run`, `/admin/content` | A Run-now button, AI summary + confidence + trust in the tables, and Approve/Discard for review. |
-| Tests | `tests/unit/content-ai.test.ts` (new) | Prompt-injection resistance, schema rejection of hijacked/malformed output, markdown-fence parsing, the prompt's own safeguards. |
+| Setting | `src/lib/env.ts` | `CONTENT_BOT_DAILY_CAP` (default 10) — how many notice posts the bot may make in a day. |
+| Posting | `src/lib/social.ts`, `src/lib/content.ts` | `createPost` now accepts an optional expiry; `postReadyItems()` posts `ready` items into their routed group as the bot, up to the daily cap, and marks them `posted`. |
+| Post text | `src/lib/content.ts` | Summary (own words) + `Source: <url>` + `Apply by: <date>`. If a summary still contains contact details it is held as `needs_review` rather than posted. |
+| Expiry | `src/lib/content.ts` | `expireBotPosts()` removes bot posts whose deadline has passed and marks their items `expired`. |
+| Stats | `src/lib/content.ts`, `/api/admin/content/stats`, `/admin/content` | A Stats tab: today vs the daily cap, posts per day (14 days), posted-by-kind and the queue by status. |
+| Admin entry | `src/app/admin/page.tsx` | The break-glass admin page now links to the content bot. |
+| Prompt | `src/lib/content-ai.ts` | The summariser is told never to include phone numbers or email addresses. |
+| Tests | `tests/unit/content-post.test.ts` (new), content-ai prompt assertion | Post-text shape and the contact-details instruction. |
 
-## How the trust ramp works
+## The flow now, end to end
 
-- A source starts at trust 0.
-- Each extraction nudges it: +0.1 at confidence ≥ 0.8, −0.1 below 0.5, unchanged otherwise (0..1).
-- Items at or above 0.7 confidence are marked `ready`; the rest wait for an admin's approve/discard.
-- Trust is surfaced in the Sources tab and will gate automatic posting in Phase 4.
+fetch → queue (`new`) → AI summarise → `ready` (confident) or `needs_review` → post into the routed group (paced by the daily cap) → expire at the deadline.
 
-## The fixed form
+## Remaining (Phase 5)
 
-The AI must return exactly:
-`{"title","summary","category","country","region","deadline","confidence"}` — with `category` from the six kinds, `country` an ISO alpha-2 code, `deadline` ISO-8601 or null, `confidence` 0..1. Anything else is rejected by zod and the item stays untouched.
-
-## Anti-injection stance
-
-The prompt tells the model to treat the notice text as data and never follow instructions inside it. The zod schema bounds the reply to the fixed form, so a hijacked reply (plain text, extra keys, wrong types, made-up categories) is discarded rather than acted on. The unit tests exercise these paths.
-
-## Owner update step
-
-To enable AI extraction, set `AI_PROVIDER=openai-compatible`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` in the VPS `.env` and restart. It works with OpenAI, Groq, OpenRouter and local OpenAI-compatible servers.
+The Eswatini starter sources — a researched list loaded disabled, so the bot has real places to watch as soon as you turn it on.

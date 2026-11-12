@@ -443,3 +443,56 @@ export const devOutbox = pgTable("dev_outbox", {
   body: text("body").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** A website or feed the content bot fetches public notices from. */
+export const contentSources = pgTable("content_sources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  country: text("country").notNull().default("SZ"),
+  category: text("category").notNull(),
+  mode: text("mode").notNull().default("rules"),
+  rules: text("rules"),
+  enabled: boolean("enabled").notNull().default(true),
+  intervalHours: integer("interval_hours").notNull().default(6),
+  lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
+  etag: text("etag"),
+  lastModified: text("last_modified"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("content_sources_url_uq").on(t.url)]);
+
+/** A fetched notice waiting to be summarised and posted (the queue). */
+export const contentItems = pgTable("content_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceId: uuid("source_id").references(() => contentSources.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  category: text("category").notNull(),
+  country: text("country").notNull(),
+  region: text("region"),
+  deadline: timestamp("deadline", { withTimezone: true }),
+  status: text("status").notNull().default("new"),
+  groupId: uuid("group_id"),
+  postId: uuid("post_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+}, (t) => [uniqueIndex("content_items_url_uq").on(t.url)]);
+
+/** Which group the bot posts each country+category into. */
+export const contentRoutes = pgTable("content_routes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  country: text("country").notNull(),
+  category: text("category").notNull(),
+  groupId: uuid("group_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("content_routes_country_category_uq").on(t.country, t.category)]);
+
+/** Singleton row for the bot's run state. */
+export const contentState = pgTable("content_state", {
+  id: integer("id").primaryKey().default(1),
+  paused: boolean("paused").notNull().default(true),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  day: text("day").notNull().default(""),
+  dailyCount: integer("daily_count").notNull().default(0),
+});

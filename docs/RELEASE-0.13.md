@@ -1,25 +1,33 @@
-# PryingEyes 0.13 — content bot, Phase 1 (places + official groups)
+# PryingEyes 0.13 — content bot, Phase 2 (sources and queue, no AI)
 
-One phase on top of `f3baeda`. Migration `0021_places` runs automatically on start.
+On top of the Phase 1 commit. Migration `0022_content_bot` runs automatically on start.
 
 ## What changed
 
 | Area | Files | Change |
 | --- | --- | --- |
-| Places | `src/lib/places.ts` (new) | `placesFromRequest()` reads only `cf-ipcountry` + `cf-region-code`/`cf-region`, falls back to `DEFAULT_COUNTRY`, ignores `XX`/`T1`, and maps Eswatini's four regions. |
-| Accounts | `users` (migration), signup, `/api/me`, `/api/me/settings` | `home_country`, `home_region`, `places_source` (detected/chosen), `extra_countries`, `seen_country`, `seen_since`. Sign-up sets them from headers with no new step. |
-| Official groups | `groups` (migration), `src/lib/social.ts` | `country`, `region`, `topic`, `official`. Official notice boards join open with no approval, and are read-only for ordinary members (the bot, content moderators and admins post). |
-| Bot account | `src/lib/bot.ts` (new) | `botAccountId()` creates/finds the `pryingeyes_bot` account (content_moderator role) on first use. |
-| Settings | `settings/page.tsx`, `mobile/src/app/(tabs)/account.tsx` | A Places section on website and app: country and region, detected-vs-chosen, and "Use detected location". |
-| Labels | `Social.tsx`, `globals.css` | A Bot tag on the bot account's posts. |
-| Tests | `tests/unit/places.test.ts` (new) | No header, XX, T1, known region code, plain region name, unknown region code, another country. |
+| Bot setting | `src/lib/env.ts` | `CONTENT_BOT=on/off` (default off). |
+| Tables | `drizzle/0022_content_bot.sql`, `src/db/schema.ts` | `content_sources`, `content_items` (the queue), `content_routes`, `content_state` (singleton). |
+| Bot logic | `src/lib/content.ts` (new) | Sources/routes/queue CRUD, the run loop, and rules-only extraction. |
+| Fetcher | `src/lib/safe-fetch.ts` | `safeFetchHtml` now takes an `accept` content-type regex so the bot can read RSS/Atom too. The existing SSRF guard (blocked addresses, redirect re-checks, size cap, timeout) is reused unchanged. |
+| Timer | `src/server-boot.ts` | When `CONTENT_BOT=on`, a built-in timer ticks every 15 minutes; it does nothing until an admin resumes it. |
+| Admin | `/api/admin/content/{sources,routes,items,state}`, `/admin/content` | Admin-only Queue, Sources and Routes screens plus pause/resume. |
+| Public | `/bot` | A public page explaining the bot; no source or queue details. |
+| Tests | `tests/unit/content-extract.test.ts`, `tests/unit/safe-fetch.test.ts` | Rules-only extraction and the SSRF guard. |
 
-## Owner update steps
+## Rules-only mode
 
-Cloudflare country detection is on by default. For region detection, enable **Rules → Transform Rules → Managed Transforms → Add visitor location headers**.
+A source is `rules` by default and needs no AI. The fetcher reads the page and:
+
+- RSS/Atom → one item per `<item>`/`<entry>`.
+- HTML → the page is one notice, or split by an optional `{"itemRegex": "…"}` rule in the source's Rules JSON.
+- A deadline is found from phrases like "Deadline:", "Apply by", "Closing date" next to a date.
+
+Every item is deduplicated by URL and lands in the queue as `new` for review. Posting and AI summarising come in Phase 3.
 
 ## Not done yet (later phases)
 
-- "Find a group" ordering and the quiet travel-suggestion line.
-- The 14-day silent home-country refresh.
-- Sources, the queue, the timer, AI extraction, the pace and stats, and the admin `/admin/content` area.
+- AI extraction, confidence, trust ramp, and the prompt-injection test.
+- Posting into groups (the routes table is ready but unused), deadlines expiring posts.
+- Daily caps, digests and the Stats tab.
+- The Eswatini starter sources (researched list, loaded disabled).

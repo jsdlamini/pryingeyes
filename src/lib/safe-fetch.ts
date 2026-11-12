@@ -47,7 +47,7 @@ const guardedLookup: net.LookupFunction = (hostname, options, callback) => {
 
 export type SafeResponse = { status: number; url: string; contentType: string; body: string };
 
-function once(url: URL, timeoutMs: number, maxBytes: number): Promise<{ status: number; location?: string; contentType: string; body: string }> {
+function once(url: URL, timeoutMs: number, maxBytes: number, accept: RegExp): Promise<{ status: number; location?: string; contentType: string; body: string }> {
   return new Promise((resolve, reject) => {
     if (net.isIP(url.hostname.replace(/^\[|\]$/g, "")) && isBlockedAddress(url.hostname.replace(/^\[|\]$/g, ""))) return reject(new UnsafeTarget("blocked address"));
     const lib = url.protocol === "https:" ? https : http;
@@ -58,7 +58,7 @@ function once(url: URL, timeoutMs: number, maxBytes: number): Promise<{ status: 
       const status = res.statusCode ?? 0;
       const contentType = String(res.headers["content-type"] ?? "");
       if (status >= 300 && status < 400 && res.headers.location) { res.resume(); return resolve({ status, location: res.headers.location, contentType, body: "" }); }
-      if (!/text\/html|application\/xhtml/i.test(contentType)) { res.resume(); return resolve({ status, contentType, body: "" }); }
+      if (!accept.test(contentType)) { res.resume(); return resolve({ status, contentType, body: "" }); }
       const chunks: Buffer[] = []; let size = 0;
       res.on("data", (c: Buffer) => {
         size += c.length;
@@ -74,13 +74,13 @@ function once(url: URL, timeoutMs: number, maxBytes: number): Promise<{ status: 
 }
 
 /** GET an http(s) page safely. Throws UnsafeTarget for inside addresses; other errors for network trouble. */
-export async function safeFetchHtml(raw: string, { timeoutMs = 4000, maxBytes = 256 * 1024, maxRedirects = 3 } = {}): Promise<SafeResponse> {
+export async function safeFetchHtml(raw: string, { timeoutMs = 4000, maxBytes = 256 * 1024, maxRedirects = 3, accept = /text\/html|application\/xhtml/i } = {}): Promise<SafeResponse> {
   let url = new URL(raw);
   for (let hop = 0; hop <= maxRedirects; hop++) {
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new UnsafeTarget("scheme");
     if (url.username || url.password) throw new UnsafeTarget("credentials in URL");
     if (url.port && !["80", "443", "8080", "8443"].includes(url.port)) throw new UnsafeTarget("port");
-    const r = await once(url, timeoutMs, maxBytes);
+    const r = await once(url, timeoutMs, maxBytes, accept);
     if (r.location) { url = new URL(r.location, url); continue; }
     return { status: r.status, url: url.toString(), contentType: r.contentType, body: r.body };
   }

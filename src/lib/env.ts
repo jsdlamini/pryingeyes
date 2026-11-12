@@ -26,6 +26,8 @@ const schema = z.object({
   ADMIN_EMAILS: z.string().default(""),
   // on = the website runs the housekeeping jobs itself; off = run `npm run jobs` separately.
   BACKGROUND_JOBS: z.enum(["on", "off"]).default("on"),
+  // The content bot (public notices). Off unless turned on; even then it starts paused until an admin resumes it.
+  CONTENT_BOT: z.enum(["on", "off"]).default("off"),
 
   // Keys (envelope encryption + keyed hashes). KEK_PREVIOUS = JSON {"1":"base64",...} for rotation.
   KEY_PROVIDER: z.enum(["local"]).default("local"),

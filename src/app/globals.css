@@ -876,3 +876,5 @@ video.post-attach.video, video.comment-attach.video, video.msg-attach.video { ma
 .share-texts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
 .bot-tag { font-size: .68rem; font-weight: 700; color: var(--accent); border: 1px solid var(--accent-2); border-radius: 999px; padding: 1px 7px; }
+
+.official-badge { font-size: .68rem; font-weight: 700; color: var(--good, #1a7f4b); border: 1px solid var(--good-2, #1a7f4b); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }

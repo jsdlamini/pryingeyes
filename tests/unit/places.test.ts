@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placesFromRequest } from "@/lib/places";
+import { personCountries, placesFromRequest } from "@/lib/places";
 
 function req(headers: Record<string, string>) {
   return new Request("https://pryingeyes.idealsoftwaresolutions.com", { headers });
@@ -26,5 +26,17 @@ describe("placesFromRequest", () => {
   });
   it("keeps another country with no region", () => {
     expect(placesFromRequest(req({ "cf-ipcountry": "ZA" }))).toEqual({ country: "ZA", region: null });
+  });
+});
+
+describe("personCountries", () => {
+  it("returns home plus extras, deduped", () => {
+    expect(personCountries({ home_country: "SZ", extra_countries: ["ZA", "SZ", "MZ"] })).toEqual(["SZ", "ZA", "MZ"]);
+  });
+  it("falls back to DEFAULT_COUNTRY when empty", () => {
+    expect(personCountries({ home_country: null, extra_countries: [] })).toEqual(["SZ"]);
+  });
+  it("caps at home plus three extras", () => {
+    expect(personCountries({ home_country: "SZ", extra_countries: ["ZA", "MZ", "BW"] })).toHaveLength(4);
   });
 });

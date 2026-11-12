@@ -14,6 +14,7 @@
 import { and, asc, count, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { audit } from "./audit";
+import { personCountries } from "./places";
 import { groupCode, hmacHex, isCrockford, normaliseCrockford, randomCrockford } from "./crypto";
 import { tokenPepper } from "./keys";
 import { decryptForUser, encryptForUser } from "./vault";
@@ -224,7 +225,8 @@ async function hasRequested(userId: string, groupId: string) {
 /** What someone who isn't a member yet may see about a group. */
 async function groupCard(userId: string, g: Group) {
   return { id: g.id, name: g.name, about: g.about, members: await memberCount(g.id),
-    joined: !!(await roleIn(userId, g.id)), requested: await hasRequested(userId, g.id) };
+    joined: !!(await roleIn(userId, g.id)), requested: await hasRequested(userId, g.id),
+    official: g.official, country: g.country, region: g.region };
 }
 
 /**
@@ -282,8 +284,16 @@ export async function discoverGroups(userId: string, q: string) {
   const rows = await db().select().from(schema.groups)
     .where(and(eq(schema.groups.listed, true), term ? or(sql`${schema.groups.name} ILIKE ${like}`, sql`${schema.groups.about} ILIKE ${like}`) : undefined))
     .orderBy(sql`${schema.groups.lastPostAt} DESC NULLS LAST`, desc(schema.groups.createdAt)).limit(30);
+  const [me] = await db().select({ hc: schema.users.homeCountry, ec: schema.users.extraCountries }).from(schema.users).where(eq(schema.users.id, userId));
+  const mine = new Set(personCountries({ home_country: me?.hc ?? null, extra_countries: me?.ec ?? [] }));
   const out = [];
   for (const g of rows) out.push(await groupCard(userId, g));
+  // Official notice boards for your countries first, then other official, then the rest.
+  out.sort((a, b) => {
+    const ao = a.official ? (mine.has(a.country ?? "") ? 0 : 1) : 2;
+    const bo = b.official ? (mine.has(b.country ?? "") ? 0 : 1) : 2;
+    return ao - bo;
+  });
   return out;
 }
 

@@ -8,7 +8,7 @@ import { Composer, PostCard, type PostView } from "@/components/Social";
 import { StatusViewer } from "@/components/StatusViewer";
 
 type G = { id: string; name: string; role: string; members: number; lastPostAt: string | null; requests: number };
-type Found = { id: string; name: string; about: string; members: number; joined: boolean; requested: boolean };
+type Found = { id: string; name: string; about: string; members: number; joined: boolean; requested: boolean; official: boolean; country: string | null };
 type Person = { author: { id: string; handle: string; avatar: string | null }; you: boolean; following: boolean; items: PostView[] };
 type Suggested = { id: string; handle: string; following: boolean; sharesGroups: number };
 
@@ -27,6 +27,7 @@ export default function Feed() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [statusView, setStatusView] = useState<string | null>(null);
+  const [travel, setTravel] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (document.visibilityState !== "visible") return;
@@ -35,6 +36,7 @@ export default function Feed() {
       .catch((e) => setErr(errMsg(e)));
   }, []);
   useEffect(() => {
+    api("/api/me").then((m) => setTravel(m.travel ?? null)).catch(() => undefined);
     void load();
     const id = setInterval(load, 12000);
     document.addEventListener("visibilitychange", load);
@@ -172,6 +174,7 @@ export default function Feed() {
           {/* Groups hub: search, yours, create, invite — all in one place */}
           <section className="card card-tight" aria-labelledby="groups-h">
             <h2 id="groups-h" style={{ margin: 0 }}>Groups</h2>
+            {travel ? <p className="muted small" style={{ marginTop: 8 }}>You look to be in {travel}. You can <Link href="/settings">change your places</Link>.</p> : null}
             <form onSubmit={search} className="row" style={{ marginTop: 8, flexWrap: "nowrap" }}>
               <label htmlFor="gq" className="sr-only">Search groups</label>
               <input id="gq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name or topic" data-testid="group-search" />
@@ -179,7 +182,7 @@ export default function Feed() {
             </form>
             {found && (found.length === 0 ? <p className="muted small">No groups match.</p> : (
               <ul className="members" style={{ marginTop: 8 }}>{found.map((g) => (
-                <li key={g.id} data-testid="found-group"><span><b>{g.name}</b><br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}</span></span>
+                <li key={g.id} data-testid="found-group"><span><b>{g.name}</b>{g.official ? <span className="official-badge">Official</span> : null}<br /><span className="muted tiny">{g.members} member{g.members === 1 ? "" : "s"}</span></span>
                   {g.joined ? <Link className="btn ghost sm" href={`/groups/${g.id}`}>Open</Link>
                     : g.requested ? <span className="muted small">Asked</span>
                     : <button className="btn sm" onClick={() => ask(g)} data-testid="ask-join">Join</button>}

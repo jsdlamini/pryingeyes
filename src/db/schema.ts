@@ -12,7 +12,7 @@
  */
 import {
   pgTable, uuid, text, timestamp, integer, boolean, bigserial, bigint, jsonb,
-  customType, uniqueIndex, index, primaryKey, date, pgEnum, AnyPgColumn,
+  customType, uniqueIndex, index, primaryKey, date, pgEnum, AnyPgColumn, real,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -458,6 +458,7 @@ export const contentSources = pgTable("content_sources", {
   lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
   etag: text("etag"),
   lastModified: text("last_modified"),
+  trust: real("trust").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("content_sources_url_uq").on(t.url)]);
 
@@ -472,6 +473,8 @@ export const contentItems = pgTable("content_items", {
   country: text("country").notNull(),
   region: text("region"),
   deadline: timestamp("deadline", { withTimezone: true }),
+  summary: text("summary"),
+  confidence: real("confidence"),
   status: text("status").notNull().default("new"),
   groupId: uuid("group_id"),
   postId: uuid("post_id"),

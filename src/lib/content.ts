@@ -1,9 +1,10 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { env } from "@/lib/env";
 import { badRequest, conflict, notFound } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { safeFetchHtml } from "@/lib/safe-fetch";
+import { CONFIDENCE_THRESHOLD, summarizeNotice } from "@/lib/content-ai";
 
 /** The kinds of public notice the bot collects. */
 export const CONTENT_CATEGORIES = ["job", "scholarship", "scam_alert", "tender", "service_notice", "weather"] as const;
@@ -124,11 +125,42 @@ export async function listItems(status?: string, limit = 100) {
   return rows.map((r) => ({ ...r, sourceName: r.sourceId ? (byId.get(r.sourceId) ?? null) : null }));
 }
 
-export async function setItemStatus(id: string, status: "discarded" | "new") {
-  const [r] = await db().update(schema.contentItems).set({ status, processedAt: status === "discarded" ? new Date() : null })
+export async function setItemStatus(id: string, status: "discarded" | "new" | "ready" | "needs_review") {
+  const [r] = await db().update(schema.contentItems).set({ status, processedAt: status === "discarded" || status === "ready" ? new Date() : null })
     .where(eq(schema.contentItems.id, id)).returning();
   if (!r) throw notFound("not_found", "Item not found.");
   return r;
+}
+
+/** Nudge a source's trust up on solid work, down on shaky work. 0..1, slowly. */
+async function adjustTrust(sourceId: string | null, confidence: number): Promise<void> {
+  if (!sourceId) return;
+  const delta = confidence >= 0.8 ? 0.1 : confidence < 0.5 ? -0.1 : 0;
+  if (delta === 0) return;
+  await db().update(schema.contentSources)
+    .set({ trust: sql`GREATEST(0, LEAST(1, ${schema.contentSources.trust} + ${delta}))` })
+    .where(eq(schema.contentSources.id, sourceId));
+}
+
+/** Run the AI summariser over queued items that haven't been extracted yet. Returns how many it processed. */
+export async function extractDueItems(): Promise<number> {
+  if (env().AI_PROVIDER === "off") return 0;
+  const items = await db().select().from(schema.contentItems)
+    .where(and(eq(schema.contentItems.status, "new"), isNull(schema.contentItems.summary)))
+    .orderBy(asc(schema.contentItems.createdAt)).limit(20);
+  let done = 0;
+  for (const it of items) {
+    const out = await summarizeNotice({ title: it.title, body: it.body, category: it.category as ContentCategory, country: it.country });
+    if (!out) continue;
+    await db().update(schema.contentItems).set({
+      title: out.title, summary: out.summary, category: out.category, country: out.country,
+      region: out.region, deadline: out.deadline ? new Date(out.deadline) : null,
+      confidence: out.confidence, status: out.confidence >= CONFIDENCE_THRESHOLD ? "ready" : "needs_review",
+    }).where(eq(schema.contentItems.id, it.id));
+    await adjustTrust(it.sourceId, out.confidence);
+    done += 1;
+  }
+  return done;
 }
 
 // ── Fetcher + rules-only extraction ──────────────────────────────
@@ -258,5 +290,6 @@ export async function tickContentBot(): Promise<void> {
   const resetDay = state?.day !== today;
   await db().insert(schema.contentState).values({ id: 1, paused: state?.paused ?? true, lastRunAt: new Date(), day: today, dailyCount: newItems })
     .onConflictDoUpdate({ target: schema.contentState.id, set: { lastRunAt: new Date(), day: today, dailyCount: resetDay ? newItems : sql`${schema.contentState.dailyCount} + ${newItems}` } });
-  if (fetched) console.log(`content bot: fetched ${fetched} sources, ${newItems} new items`);
+  const extracted = await extractDueItems();
+  if (fetched || extracted) console.log(`content bot: fetched ${fetched} sources, ${newItems} new items, extracted ${extracted}`);
 }

@@ -162,6 +162,13 @@
       "when": 1794484194537,
       "tag": "0022_content_bot",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794490618108,
+      "tag": "0023_ai_extraction",
+      "breakpoints": true
     }
   ]
 }

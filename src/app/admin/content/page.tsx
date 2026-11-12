@@ -31,6 +31,10 @@ export default function ContentAdmin() {
     setErr(""); setMsg("");
     try { await api("/api/admin/content/state", { method: "POST", body: { paused: v } }); setMsg(v ? "Paused. No new notices will be fetched." : "Resumed. The bot will fetch on its next tick."); await loadState(); } catch (x) { setErr(errMsg(x)); }
   }
+  async function runNow() {
+    setErr(""); setMsg("");
+    try { await api("/api/admin/content/run", { method: "POST" }); setMsg("Ran the bot loop (fetch + extract)."); await loadState(); await loadItems(); await loadSources(); } catch (x) { setErr(errMsg(x)); }
+  }
   async function addSource(e: React.FormEvent) {
     e.preventDefault(); setErr(""); setMsg("");
     try { await api("/api/admin/content/sources", { method: "POST", body: { name: src.name, url: src.url, category: src.category, country: src.country, intervalHours: Number(src.intervalHours), mode: src.mode, rules: src.rules.trim() || null } }); setMsg("Source added."); setSrc({ ...src, name: "", url: "", rules: "" }); await loadSources(); } catch (x) { setErr(errMsg(x)); }
@@ -43,9 +47,9 @@ export default function ContentAdmin() {
     setErr("");
     try { await api(`/api/admin/content/sources?id=${encodeURIComponent(id)}`, { method: "DELETE" }); await loadSources(); } catch (x) { setErr(errMsg(x)); }
   }
-  async function discard(id: string) {
+  async function setStatus(id: string, status: string) {
     setErr("");
-    try { await api("/api/admin/content/items", { method: "PATCH", body: { id, status: "discarded" } }); await loadItems(); } catch (x) { setErr(errMsg(x)); }
+    try { await api("/api/admin/content/items", { method: "PATCH", body: { id, status } }); await loadItems(); } catch (x) { setErr(errMsg(x)); }
   }
   async function addRoute(e: React.FormEvent) {
     e.preventDefault(); setErr(""); setMsg("");
@@ -70,7 +74,10 @@ export default function ContentAdmin() {
             {state.lastRunAt ? ` · last ran ${relTime(state.lastRunAt)}` : " · never ran"}
             {" · "}{state.queueNew} queued · {state.dailyCount} today
           </span>
-          <button className={`btn sm ${state.paused ? "" : "ghost"}`} onClick={() => pause(!state.paused)} disabled={!state.enabled}>{state.paused ? "Resume" : "Pause"}</button>
+          <span className="row" style={{ gap: 6 }}>
+            <button className="btn sm ghost" onClick={() => runNow()} disabled={!state.enabled}>Run now</button>
+            <button className={`btn sm ${state.paused ? "" : "ghost"}`} onClick={() => pause(!state.paused)} disabled={!state.enabled}>{state.paused ? "Resume" : "Pause"}</button>
+          </span>
         </div>
       )}
 
@@ -83,17 +90,23 @@ export default function ContentAdmin() {
       {tab === "queue" && (
         <div className="card">
           <h2>Queue</h2>
-          <p className="muted small">Fetched notices waiting for summarising and posting (Phase 3).</p>
+          <p className="muted small">Fetched notices. The AI summarises them; confident ones are marked ready, the rest wait for your review.</p>
           {!items ? <p>Loading…</p> : items.length === 0 ? <p className="muted small">Nothing queued yet.</p> : (
-            <div className="tablewrap"><table className="tbl"><thead><tr><th>Title</th><th>Kind</th><th>Country</th><th>Deadline</th><th>Status</th><th></th></tr></thead>
+            <div className="tablewrap"><table className="tbl"><thead><tr><th>Notice</th><th>Kind</th><th>Place</th><th>Deadline</th><th>Status</th><th></th></tr></thead>
               <tbody>{items.map((it) => (
                 <tr key={it.id}>
-                  <td className="small"><b>{it.title}</b><br /><span className="muted tiny">{it.sourceName ?? "?"} · <a href={it.url} target="_blank" rel="noreferrer noopener">source</a></span></td>
+                  <td className="small">
+                    <b>{it.title}</b>{it.summary ? <><br /><span className="muted tiny">{it.summary.slice(0, 160)}{it.summary.length > 160 ? "…" : ""}</span></> : null}
+                    <br /><span className="muted tiny">{it.sourceName ?? "?"} · <a href={it.url} target="_blank" rel="noreferrer noopener">source</a></span>
+                  </td>
                   <td className="small">{CAT_LABEL[it.category] ?? it.category}</td>
                   <td className="small">{it.country}{it.region ? ` · ${it.region}` : ""}</td>
                   <td className="small">{it.deadline ? relTime(it.deadline) : "—"}</td>
-                  <td className="small">{it.status}</td>
-                  <td>{it.status === "new" ? <button className="btn ghost sm" onClick={() => discard(it.id)}>Discard</button> : null}</td>
+                  <td className="small">{it.status}{it.confidence != null ? ` · ${Math.round(it.confidence * 100)}%` : ""}</td>
+                  <td><div className="row" style={{ gap: 4 }}>
+                    {it.status === "needs_review" ? <button className="btn ghost sm" onClick={() => setStatus(it.id, "ready")}>Approve</button> : null}
+                    {it.status !== "discarded" ? <button className="btn ghost sm danger" onClick={() => setStatus(it.id, "discarded")}>Discard</button> : null}
+                  </div></td>
                 </tr>))}</tbody></table></div>
           )}
         </div>
@@ -117,13 +130,14 @@ export default function ContentAdmin() {
             <input value={src.rules} onChange={(e) => setSrc({ ...src, rules: e.target.value })} placeholder='Rules JSON (optional), e.g. {"itemRegex":"<article[^>]*>[\\s\\S]*?<\\/article>"}' aria-label="Rules" />
           </form>
           {!sources ? <p>Loading…</p> : sources.length === 0 ? <p className="muted small">No sources yet.</p> : (
-            <div className="tablewrap"><table className="tbl"><thead><tr><th>Name</th><th>Kind</th><th>Country</th><th>Every</th><th>Fetched</th><th>Actions</th></tr></thead>
+            <div className="tablewrap"><table className="tbl"><thead><tr><th>Name</th><th>Kind</th><th>Country</th><th>Every</th><th>Trust</th><th>Fetched</th><th>Actions</th></tr></thead>
               <tbody>{sources.map((s) => (
                 <tr key={s.id}>
                   <td className="small"><b>{s.name}</b><br /><span className="muted tiny">{s.url}</span></td>
                   <td className="small">{CAT_LABEL[s.category] ?? s.category} · {s.mode}</td>
                   <td className="small">{s.country}</td>
                   <td className="small">{s.intervalHours}h</td>
+                  <td className="small">{Math.round((s.trust ?? 0) * 100)}%</td>
                   <td className="small">{s.lastFetchedAt ? relTime(s.lastFetchedAt) : "never"}</td>
                   <td><div className="row" style={{ gap: 4 }}><button className="btn ghost sm" onClick={() => toggleSource(s)}>{s.enabled ? "Disable" : "Enable"}</button><button className="btn ghost sm danger" onClick={() => delSource(s.id)}>Delete</button></div></td>
                 </tr>))}</tbody></table></div>

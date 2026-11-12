@@ -28,6 +28,11 @@ const schema = z.object({
   BACKGROUND_JOBS: z.enum(["on", "off"]).default("on"),
   // The content bot (public notices). Off unless turned on; even then it starts paused until an admin resumes it.
   CONTENT_BOT: z.enum(["on", "off"]).default("off"),
+  // The bot's AI summariser. openai-compatible works with OpenAI, Groq, OpenRouter and local servers.
+  AI_PROVIDER: z.enum(["off", "openai-compatible"]).default("off"),
+  AI_BASE_URL: z.string().default(""),   // e.g. https://api.openai.com/v1
+  AI_API_KEY: z.string().default(""),
+  AI_MODEL: z.string().default(""),
 
   // Keys (envelope encryption + keyed hashes). KEK_PREVIOUS = JSON {"1":"base64",...} for rotation.
   KEY_PROVIDER: z.enum(["local"]).default("local"),
@@ -106,6 +111,11 @@ export function env(): Env {
   if (e.EMAIL_PROVIDER === "resend") {
     if (!/^re_[A-Za-z0-9_]{8,}$/.test(e.RESEND_API_KEY)) throw new Error("Invalid configuration:\nRESEND_API_KEY: set your Resend API key (starts with re_) or use EMAIL_PROVIDER=outbox");
     if (!/<?[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>?\s*$/.test(e.EMAIL_FROM)) throw new Error("Invalid configuration:\nEMAIL_FROM: must be an address, e.g. PryingEyes <no-reply@yourdomain.com>");
+  }
+  if (e.AI_PROVIDER === "openai-compatible") {
+    if (!/^https:\/\//.test(e.AI_BASE_URL)) throw new Error("Invalid configuration:\nAI_BASE_URL: must be https (e.g. https://api.openai.com/v1) when AI_PROVIDER=openai-compatible");
+    if (!e.AI_API_KEY) throw new Error("Invalid configuration:\nAI_API_KEY: required when AI_PROVIDER=openai-compatible");
+    if (!e.AI_MODEL) throw new Error("Invalid configuration:\nAI_MODEL: required when AI_PROVIDER=openai-compatible");
   }
   if (e.APP_ENV !== "development") {
     const problems: string[] = [];

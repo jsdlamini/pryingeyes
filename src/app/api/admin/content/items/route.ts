@@ -3,7 +3,7 @@ import { route, json, readJson } from "@/lib/http";
 import { requireUser, requireRole } from "@/lib/auth";
 import { listItems, setItemStatus } from "@/lib/content";
 
-const Patch = z.object({ id: z.string().uuid(), status: z.enum(["discarded", "new"]) });
+const Patch = z.object({ id: z.string().uuid(), status: z.enum(["discarded", "new", "ready", "needs_review"]) });
 
 export const GET = route(async (req) => {
   const ctx = await requireUser(req); requireRole(ctx, "admin");

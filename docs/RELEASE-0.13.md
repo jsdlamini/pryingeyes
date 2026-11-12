@@ -1,33 +1,34 @@
-# PryingEyes 0.13 — content bot, Phase 2 (sources and queue, no AI)
+# PryingEyes 0.13 — content bot, Phase 3 (AI extraction)
 
-On top of the Phase 1 commit. Migration `0022_content_bot` runs automatically on start.
+On top of Phase 2. Migration `0023_ai_extraction` runs automatically on start.
 
 ## What changed
 
 | Area | Files | Change |
 | --- | --- | --- |
-| Bot setting | `src/lib/env.ts` | `CONTENT_BOT=on/off` (default off). |
-| Tables | `drizzle/0022_content_bot.sql`, `src/db/schema.ts` | `content_sources`, `content_items` (the queue), `content_routes`, `content_state` (singleton). |
-| Bot logic | `src/lib/content.ts` (new) | Sources/routes/queue CRUD, the run loop, and rules-only extraction. |
-| Fetcher | `src/lib/safe-fetch.ts` | `safeFetchHtml` now takes an `accept` content-type regex so the bot can read RSS/Atom too. The existing SSRF guard (blocked addresses, redirect re-checks, size cap, timeout) is reused unchanged. |
-| Timer | `src/server-boot.ts` | When `CONTENT_BOT=on`, a built-in timer ticks every 15 minutes; it does nothing until an admin resumes it. |
-| Admin | `/api/admin/content/{sources,routes,items,state}`, `/admin/content` | Admin-only Queue, Sources and Routes screens plus pause/resume. |
-| Public | `/bot` | A public page explaining the bot; no source or queue details. |
-| Tests | `tests/unit/content-extract.test.ts`, `tests/unit/safe-fetch.test.ts` | Rules-only extraction and the SSRF guard. |
+| Settings | `src/lib/env.ts` | `AI_PROVIDER=off/openai-compatible`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`. Required together when `openai-compatible`. |
+| Tables | `drizzle/0023_ai_extraction.sql`, `src/db/schema.ts` | `content_items.summary` + `confidence`; `content_sources.trust`. |
+| AI module | `src/lib/content-ai.ts` (new) | Fixed JSON form (zod `AI_EXTRACTION_SCHEMA`), `parseAiResponse`, `summarizeNotice`, `SYSTEM_PROMPT`, `CONFIDENCE_THRESHOLD`. |
+| Run loop | `src/lib/content.ts` | After fetching, `extractDueItems()` runs the AI over `new` items; confident ones become `ready`, the rest `needs_review`. Each result nudges the source's trust up or down. |
+| Admin | `/api/admin/content/run`, `/admin/content` | A Run-now button, AI summary + confidence + trust in the tables, and Approve/Discard for review. |
+| Tests | `tests/unit/content-ai.test.ts` (new) | Prompt-injection resistance, schema rejection of hijacked/malformed output, markdown-fence parsing, the prompt's own safeguards. |
 
-## Rules-only mode
+## How the trust ramp works
 
-A source is `rules` by default and needs no AI. The fetcher reads the page and:
+- A source starts at trust 0.
+- Each extraction nudges it: +0.1 at confidence ≥ 0.8, −0.1 below 0.5, unchanged otherwise (0..1).
+- Items at or above 0.7 confidence are marked `ready`; the rest wait for an admin's approve/discard.
+- Trust is surfaced in the Sources tab and will gate automatic posting in Phase 4.
 
-- RSS/Atom → one item per `<item>`/`<entry>`.
-- HTML → the page is one notice, or split by an optional `{"itemRegex": "…"}` rule in the source's Rules JSON.
-- A deadline is found from phrases like "Deadline:", "Apply by", "Closing date" next to a date.
+## The fixed form
 
-Every item is deduplicated by URL and lands in the queue as `new` for review. Posting and AI summarising come in Phase 3.
+The AI must return exactly:
+`{"title","summary","category","country","region","deadline","confidence"}` — with `category` from the six kinds, `country` an ISO alpha-2 code, `deadline` ISO-8601 or null, `confidence` 0..1. Anything else is rejected by zod and the item stays untouched.
 
-## Not done yet (later phases)
+## Anti-injection stance
 
-- AI extraction, confidence, trust ramp, and the prompt-injection test.
-- Posting into groups (the routes table is ready but unused), deadlines expiring posts.
-- Daily caps, digests and the Stats tab.
-- The Eswatini starter sources (researched list, loaded disabled).
+The prompt tells the model to treat the notice text as data and never follow instructions inside it. The zod schema bounds the reply to the fixed form, so a hijacked reply (plain text, extra keys, wrong types, made-up categories) is discarded rather than acted on. The unit tests exercise these paths.
+
+## Owner update step
+
+To enable AI extraction, set `AI_PROVIDER=openai-compatible`, `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL` in the VPS `.env` and restart. It works with OpenAI, Groq, OpenRouter and local OpenAI-compatible servers.
